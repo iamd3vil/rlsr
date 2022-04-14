@@ -1,7 +1,9 @@
 mod errors;
 use std::{
-    fs,
-    process::{self, Command, ExitStatus}, path::Path,
+    fs::{self, File},
+    io,
+    path::Path,
+    process::{self, Command},
 };
 
 use clap::{Parser, Result};
@@ -27,6 +29,7 @@ struct Job {
     command: String,
     artifact: String,
     bin_name: String,
+    name: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -81,13 +84,48 @@ fn run_job(build: &Build, job: &Job) -> Result<(), ReleasrError> {
     // Split cmd into command, args.
     let cmds = job.command.split(" ").collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output()?;
-    
+
     // If the job executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
         // Create dist directory.
         fs::create_dir_all(&build.dist_folder)?;
-        fs::copy(&job.artifact, Path::new(&build.dist_folder).join(&job.bin_name))?;
+        fs::copy(
+            &job.artifact,
+            Path::new(&build.dist_folder).join(&job.bin_name),
+        )?;
+
+        let dist_folder = Path::new(&build.dist_folder).join(&job.bin_name);
+        let bin_path = dist_folder.to_str();
+        let bin_path = match bin_path {
+            None => {
+                return Err(ReleasrError::CustomError(String::from(
+                    "error creating bin path",
+                )))
+            }
+            Some(bin_path) => bin_path,
+        };
+
+        // Create an archive.
+        println!("creating an archive for {}", &job.name);
+        archive_file(bin_path, &build.dist_folder, &job.name)?;
     }
 
+    Ok(())
+}
+
+fn archive_file(filename: &str, dist: &str, name: &str) -> Result<(), ReleasrError> {
+    let mut f = File::open(filename)?;
+    // Create a zip file.
+    let mut zip_path = Path::new(&dist).join(name);
+    zip_path.set_extension("zip");
+    let mut zip_file = File::create(zip_path)?;
+    let mut zip = zip::ZipWriter::new(&mut zip_file);
+
+    let options =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    zip.start_file(filename, options)?;
+    io::copy(&mut f, &mut zip)?;
+
+    zip.finish()?;
     Ok(())
 }

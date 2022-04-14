@@ -14,7 +14,7 @@ impl fmt::Display for ReleasrError {
         match self {
             ReleasrError::CustomError(error) => write!(f, "{}", error),
             ReleasrError::ParseError(error) => write!(f, "error reading file: {}", error),
-            ReleasrError::IoError(err) => write!(f, "io error: {}", err)
+            ReleasrError::IoError(err) => write!(f, "io error: {}", err),
         }
     }
 }
@@ -22,6 +22,13 @@ impl fmt::Display for ReleasrError {
 impl From<std::io::Error> for ReleasrError {
     fn from(err: std::io::Error) -> Self {
         ReleasrError::IoError(err)
+    }
+}
+
+impl From<zip::result::ZipError> for ReleasrError {
+    fn from(err: zip::result::ZipError) -> Self {
+        let error = format!("error creating zip file: {}", err);
+        ReleasrError::CustomError(error)
     }
 }
 

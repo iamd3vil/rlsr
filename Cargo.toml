@@ -10,3 +10,4 @@ clap = { version = "3.1.8", features = ["derive"] }
 serde = { version = "1.0.136", features = ["std", "derive", "serde_derive"] }
 serde_yaml = "0.8.23"
 yaml-rust = "0.4.5"
+zip = "0.6.2"
