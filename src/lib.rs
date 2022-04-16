@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Build {
@@ -37,12 +38,15 @@ pub fn parse_config(cfg_path: &str) -> Result<Config> {
 
 pub fn run(cfg: &Config) -> Result<()> {
     println!("builds: {:?}", cfg.builds);
-    for build in &cfg.builds {
-        println!("executing build \"{}\"", build.name);
-        for job in &build.jobs {
-            run_job(build, job)?;
-        }
-    }
+    cfg.builds.par_iter().for_each(|build| {
+        build.jobs.par_iter().for_each(|job| {
+            let res = run_job(build, job);
+            match res {
+                Err(err) => println!("error exectuing build {}: {}", &build.name, err),
+                Ok(_) => return
+            };
+        })
+    });
     Ok(())
 }
 
