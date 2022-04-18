@@ -8,6 +8,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
+use log::{debug, info, error};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Build {
@@ -37,12 +38,12 @@ pub fn parse_config(cfg_path: &str) -> Result<Config> {
 }
 
 pub fn run(cfg: &Config) -> Result<()> {
-    println!("builds: {:?}", cfg.builds);
     cfg.builds.par_iter().for_each(|build| {
+        info!("executing build: {}", build.name);
         build.jobs.par_iter().for_each(|job| {
             let res = run_job(build, job);
             match res {
-                Err(err) => println!("error exectuing build {}: {}", &build.name, err),
+                Err(err) => error!("error exectuing build {}: {}", &build.name, err),
                 Ok(_) => return
             };
         })
@@ -51,6 +52,7 @@ pub fn run(cfg: &Config) -> Result<()> {
 }
 
 fn run_job(build: &Build, job: &Job) -> Result<()> {
+    info!("executing job: {}", job.name);
     // Split cmd into command, args.
     let cmds = job.command.split(" ").collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output()?;
@@ -75,7 +77,7 @@ fn run_job(build: &Build, job: &Job) -> Result<()> {
         };
 
         // Create an archive.
-        println!("creating an archive for {}", &job.name);
+        debug!("creating an archive for {}", &job.name);
         archive_file(bin_path, &build.dist_folder, &job.name)
             .with_context(|| format!("error while creating archive for job: {}", job.name))?;
     }

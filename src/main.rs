@@ -1,5 +1,6 @@
 use std::process;
 use clap::Parser;
+use env_logger::Env;
 use releasr::{parse_config, run};
 
 #[derive(Parser, Debug)]
@@ -10,6 +11,7 @@ struct Args {
 }
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     let config = args.config;
 
