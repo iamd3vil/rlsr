@@ -34,44 +34,30 @@ pub async fn parse_config(cfg_path: &str) -> Result<Config> {
     Ok(cfg)
 }
 
-pub async fn run(cfg: &Config) -> Result<()> {
+pub async fn run(cfg: Config) -> Result<()> {
     println!("builds: {:?}", cfg.builds);
     // let builds = cfg.builds.clone();
-    let shared = Arc::from(&cfg.builds);
+    let num = cfg.builds.len();
+    let shared: Arc<Vec<Build>> = Arc::from(cfg.builds);
     // let all_builds = vec![];
-    for i in 0..cfg.builds.len() {
+    let mut all_builds = vec![];
+    for i in 0..num {
         let builds = shared.clone();
-        let shared_jobs = Arc::from(&builds[i].jobs);
-        
         for j in 0..builds[i].jobs.len() {
             let builds = shared.clone();
-            tokio::spawn(async move {
-                run_job(&builds[i], &builds[i].jobs[j]).await;
-            });
+            all_builds.push(tokio::spawn(async move {
+                let res = run_job(&builds[i], &builds[i].jobs[j]).await;
+                match res {
+                    Err(err) => {
+                        println!("error executing the job: {}", err);
+                        return
+                    },
+                    Ok(_) => return
+                }
+            }));
         }
     }
-
-    // let cfg = Arc::from(cfg);
-    // let cfg = cfg.clone();
-    // let mut all_builds = vec![];
-    // let builds = &cfg.builds;
-    // for build in builds {
-    //     println!("executing build \"{}\"", build.name);
-    //     for job in &build.jobs {
-    //         all_builds.push(tokio::spawn(async {
-    //             let res = run_job(&build, job).await;
-    //             match res {
-    //                 Err(err) => {
-    //                     println!("error executing the job: {}", err);
-    //                     return
-    //                 },
-    //                 Ok(()) => return
-    //             }
-    //         }));
-    //     }
-    // }
-    // future::join(all_builds)
-    // futures::future::join_all(&mut all_builds).await;
+    futures::future::join_all(&mut all_builds).await;
     println!("Done executing all jobs");
     Ok(())
 }
