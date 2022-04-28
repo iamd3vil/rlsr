@@ -1,16 +1,23 @@
 use async_zip::write::{EntryOptions, ZipFileWriter};
-use std::{path::Path, sync::Arc};
-use tokio::{fs, process::Command};
 use futures;
+use log::{debug, error, info, warn};
+use std::{path::Path, sync::Arc, env};
+use tokio::{fs, process::Command};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+struct Github {
+    owner: String,
+    repo: String,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Build {
     name: String,
     dist_folder: String,
     jobs: Vec<Job>,
+    github: Option<Github>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,30 +42,82 @@ pub async fn parse_config(cfg_path: &str) -> Result<Config> {
 }
 
 pub async fn run(cfg: Config) -> Result<()> {
-    println!("builds: {:?}", cfg.builds);
+    // Check if `GITHUB_TOKEN` is present.
+    let ghtoken = match env::var("GITHUB_TOKEN") {
+        Ok(token) => token,
+        Err(_) => {
+            warn!("`GITHUB_TOKEN` isn't set, won't publish to github.");
+            String::from("")
+        }
+    };
+
+    if ghtoken != "" {
+        octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken.clone()))?;
+    }
+
     // let builds = cfg.builds.clone();
     let num = cfg.builds.len();
     let shared: Arc<Vec<Build>> = Arc::from(cfg.builds);
     // let all_builds = vec![];
-    let mut all_builds = vec![];
     for i in 0..num {
         let builds = shared.clone();
+        let mut all_jobs = vec![];
         for j in 0..builds[i].jobs.len() {
             let builds = shared.clone();
-            all_builds.push(tokio::spawn(async move {
+            all_jobs.push(tokio::spawn(async move {
                 let res = run_job(&builds[i], &builds[i].jobs[j]).await;
                 match res {
                     Err(err) => {
                         println!("error executing the job: {}", err);
-                        return
-                    },
-                    Ok(_) => return
+                        return;
+                    }
+                    Ok(_) => return,
                 }
             }));
         }
+
+        // Wait until all jobs are finished in a build.
+        futures::future::join_all(&mut all_jobs).await;
+
+        // Publish to github if we can find a latest tag or github repo configured in config.
+        let latest_tag = match get_latest_tag().await {
+            Ok(tag) => {
+                info!("found out latest tag: {}", tag);
+                tag
+            }
+            Err(_) => {
+                warn!("error finding tag, skipping publishing");
+                continue;
+            }
+        };
+        debug!("latest tag: {}", latest_tag);
+
+        let gh = match &builds[i].github {
+            Some(gh) => gh,
+            None => {
+                warn!("github repo is blank, skipping publishing");
+                continue
+            }
+        };
+
+        
+        if ghtoken == "" {
+            error!("GITHUB_TOKEN is blank, skipping publishing build");
+            continue
+        }
+
+        let ghclient = octocrab::instance();
+
+        let res = ghclient
+            .repos(&gh.owner, &gh.repo)
+            .releases()
+            .create(&latest_tag)
+            .body("")
+            .send()
+            .await?;
+        info!("release created: {:?}", res);
     }
-    futures::future::join_all(&mut all_builds).await;
-    println!("Done executing all jobs");
+    println!("Done executing all builds");
     Ok(())
 }
 
@@ -112,4 +171,14 @@ async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<()> {
     zw.close().await?;
     zip.close().await?;
     Ok(())
+}
+
+async fn get_latest_tag() -> Result<String> {
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["describe", "--abbrev=0"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!("error getting latest tag");
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
