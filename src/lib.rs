@@ -1,11 +1,14 @@
 use async_zip::write::{EntryOptions, ZipFileWriter};
-use futures;
 use log::{debug, error, info, warn};
-use std::{path::Path, sync::Arc, env};
+use std::{path::Path, sync::{Arc, Mutex}, env};
 use tokio::{fs, process::Command};
+use tokio_util::codec::{BytesCodec, FramedRead};
+use reqwest::{Body, Client};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+
+const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct Github {
@@ -51,7 +54,7 @@ pub async fn run(cfg: Config) -> Result<()> {
         }
     };
 
-    if ghtoken != "" {
+    if !ghtoken.is_empty() {
         octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken.clone()))?;
     }
 
@@ -62,22 +65,27 @@ pub async fn run(cfg: Config) -> Result<()> {
     for i in 0..num {
         let builds = shared.clone();
         let mut all_jobs = vec![];
+        let all_archives = Arc::new(Mutex::new(vec![]));
         for j in 0..builds[i].jobs.len() {
             let builds = shared.clone();
+            let all_archives = all_archives.clone();
             all_jobs.push(tokio::spawn(async move {
                 let res = run_job(&builds[i], &builds[i].jobs[j]).await;
                 match res {
                     Err(err) => {
                         println!("error executing the job: {}", err);
-                        return;
                     }
-                    Ok(_) => return,
+                    Ok(archive) => {
+                        all_archives.lock().unwrap().push(archive);
+                    },
                 }
             }));
         }
 
         // Wait until all jobs are finished in a build.
         futures::future::join_all(&mut all_jobs).await;
+
+        println!("all archives generated: {:?}", all_archives);
 
         // Publish to github if we can find a latest tag or github repo configured in config.
         let latest_tag = match get_latest_tag().await {
@@ -101,7 +109,7 @@ pub async fn run(cfg: Config) -> Result<()> {
         };
 
         
-        if ghtoken == "" {
+        if ghtoken.is_empty() {
             error!("GITHUB_TOKEN is blank, skipping publishing build");
             continue
         }
@@ -115,15 +123,23 @@ pub async fn run(cfg: Config) -> Result<()> {
             .body("")
             .send()
             .await?;
-        info!("release created: {:?}", res);
+
+        let release_id = res.id.0;
+        let owner = &builds[i].github.as_ref().unwrap().owner;
+        let repo = &builds[i].github.as_ref().unwrap().repo;
+        let ghtoken = ghtoken.clone();
+        // Upload all archives.
+        upload_archives(all_archives.lock().unwrap().to_vec(), release_id, String::from(owner), String::from(repo), ghtoken).await?;
+
+        info!("release created");
     }
     println!("Done executing all builds");
     Ok(())
 }
 
-pub async fn run_job(build: &Build, job: &Job) -> Result<()> {
+pub async fn run_job(build: &Build, job: &Job) -> Result<String> {
     // Split cmd into command, args.
-    let cmds = job.command.split(" ").collect::<Vec<&str>>();
+    let cmds = job.command.split(' ').collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output().await?;
 
     // If the job executed succesfully, copy the artifact to dist folder.
@@ -148,20 +164,21 @@ pub async fn run_job(build: &Build, job: &Job) -> Result<()> {
 
         // Create an archive.
         println!("creating an archive for {}", &job.name);
-        archive_file(bin_path, &build.dist_folder, &job.name)
+        let zip_path = archive_file(bin_path, &build.dist_folder, &job.name)
             .await
             .with_context(|| format!("error while creating archive for job: {}", job.name))?;
+        return Ok(zip_path);
     }
 
-    Ok(())
+    Ok(String::from(""))
 }
 
-async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<()> {
+async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<String> {
     let mut f = tokio::fs::File::open(filename).await?;
     // Create a zip file.
     let mut zip_path = Path::new(&dist).join(name);
     zip_path.set_extension("zip");
-    let mut zip_file = tokio::fs::File::create(zip_path).await?;
+    let mut zip_file = tokio::fs::File::create(&zip_path).await?;
     let mut zip = ZipFileWriter::new(&mut zip_file);
     let options = EntryOptions::new(filename.to_owned(), async_zip::Compression::Zstd);
     let mut zw = zip.write_entry_stream(options).await?;
@@ -170,7 +187,11 @@ async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<()> {
 
     zw.close().await?;
     zip.close().await?;
-    Ok(())
+    if let Some(path) = zip_path.to_str() {
+        Ok(String::from(path))
+    } else {
+        bail!("error getting archive");
+    }
 }
 
 async fn get_latest_tag() -> Result<String> {
@@ -180,5 +201,60 @@ async fn get_latest_tag() -> Result<String> {
     if !output.status.success() {
         bail!("error getting latest tag");
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(String::from(String::from_utf8_lossy(&output.stdout).to_string().trim()))
+}
+
+async fn upload_archives(archives: Vec<String>, release_id: u64, owner: String, repo: String, ghtoken: String) -> Result<()> {
+    let client = Arc::new(reqwest::Client::new());
+    let mut all_uploads = vec![];
+    let num = archives.len();
+    let archives = Arc::new(archives);
+    for i in 0..num {
+        let archives = archives.clone();
+        let filename = String::from(Path::new(&archives[i]).file_name().unwrap().to_str().unwrap());
+        let upload_url = format!("https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}", owner, repo, release_id, filename);
+        let ghclient = client.clone();
+        let ghtoken = ghtoken.clone();
+        let owner = owner.clone();
+        all_uploads.push(tokio::spawn(async move {
+            println!("uploading to url: {}", upload_url);
+            let res = upload_file(upload_url, archives[i].clone(), ghclient, owner, ghtoken).await;
+            if let Err(err) = res {
+                error!("error uploading archive {}: {}", archives[i], err);
+                std::process::exit(1);
+            }
+        }));
+    }
+
+    futures::future::join_all(all_uploads).await;
+    Ok(())
+}
+
+async fn upload_file(url: String, filepath: String, ghclient: Arc<Client>, owner: String, ghtoken: String) -> Result<()> {
+    // Stat the file to get the size of the file.
+    let meta = fs::metadata(&filepath).await?;
+    let size = meta.len();
+
+    // Guess mime.
+    let mime_type = infer::get_from_path(&filepath)?.unwrap().mime_type();
+
+    // Open file.
+    let f = tokio::fs::File::open(&filepath).await?;
+    let res = ghclient.post(url)
+        .basic_auth(owner, Some(ghtoken))
+        .body(file_to_body(f))
+        .header("Content-Length", size)
+        .header("Content-Type", mime_type)
+        .header("Accept", MEDIA_TYPE)
+        .send()
+        .await?;
+    if res.status() != reqwest::StatusCode::CREATED {
+        error!("error uploading to github, status: {}, error: {}", res.status(), res.text().await?);
+    }
+    Ok(())
+}
+
+fn file_to_body(file: tokio::fs::File) -> Body {
+    let stream = FramedRead::new(file, BytesCodec::new());
+    Body::wrap_stream(stream)
 }
