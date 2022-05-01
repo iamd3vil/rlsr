@@ -9,7 +9,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 
 use crate::config::Build;
-use crate::utils::{get_latest_tag, get_all_tags, get_all_git_log, get_changelog};
+use crate::utils::{get_all_git_log, get_all_tags, get_changelog, get_latest_tag};
 
 pub async fn publish_build(
     build: &Build,
@@ -49,8 +49,6 @@ pub async fn publish_build(
     } else {
         changelog = get_changelog().await?;
     }
-    
-    println!("{}", changelog);
 
     let res = ghclient
         .repos(&gh.owner, &gh.repo)

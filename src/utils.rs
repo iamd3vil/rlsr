@@ -28,7 +28,11 @@ pub async fn get_all_tags() -> Result<Vec<String>> {
         );
     }
     let out = String::from_utf8_lossy(&output.stdout).to_string();
-    Ok(out.split('\n').map(String::from).filter(|tag| !tag.is_empty()).collect())
+    Ok(out
+        .split('\n')
+        .map(String::from)
+        .filter(|tag| !tag.is_empty())
+        .collect())
 }
 
 async fn get_previous_tag() -> Result<String> {
@@ -43,6 +47,7 @@ async fn get_previous_tag() -> Result<String> {
         );
     }
     let prev_tag_commit = String::from_utf8_lossy(&output.stdout).to_string();
+    let prev_tag_commit = prev_tag_commit.trim();
 
     // Get tag for the commit.
     let mut cmd = Command::new("git");
@@ -54,7 +59,8 @@ async fn get_previous_tag() -> Result<String> {
             String::from_utf8_lossy(&output.stdout).to_string()
         );
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let prev_tag = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok(String::from(prev_tag.trim()))
 }
 
 // Get formatted git log.
@@ -77,11 +83,15 @@ pub async fn get_changelog() -> Result<String> {
     let latest_tag = get_latest_tag().await?;
 
     let mut cmd = Command::new("git");
-    cmd.args(vec!["log", "--format='%h: %B'", &format!("{}..{}", prev_tag, latest_tag)]);
+    cmd.args(vec![
+        "log",
+        "--format=%h: %B",
+        &format!("{}..{}", prev_tag, latest_tag),
+    ]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(
-            "error getting git log: {}",
+            "error getting changelog: {}",
             String::from_utf8_lossy(&output.stdout).to_string()
         );
     }
