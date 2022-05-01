@@ -9,7 +9,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 
 use crate::config::Build;
-use crate::utils::get_latest_tag;
+use crate::utils::{get_latest_tag, get_all_tags, get_all_git_log, get_changelog};
 
 pub async fn publish_build(
     build: &Build,
@@ -41,11 +41,22 @@ pub async fn publish_build(
 
     let ghclient = octocrab::instance();
 
+    // Get changelog.
+    let tags = get_all_tags().await?;
+    let changelog: String;
+    if tags.len() == 1 {
+        changelog = get_all_git_log().await?;
+    } else {
+        changelog = get_changelog().await?;
+    }
+    
+    println!("{}", changelog);
+
     let res = ghclient
         .repos(&gh.owner, &gh.repo)
         .releases()
         .create(&latest_tag)
-        .body("")
+        .body(&changelog)
         .send()
         .await?;
 
