@@ -51,7 +51,7 @@ async fn get_previous_tag() -> Result<String> {
 
     // Get tag for the commit.
     let mut cmd = Command::new("git");
-    cmd.args(vec!["describe", "--abbrev=0", "--tags", &prev_tag_commit]);
+    cmd.args(vec!["describe", "--abbrev=0", "--tags", prev_tag_commit]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(

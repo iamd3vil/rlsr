@@ -43,12 +43,11 @@ pub async fn publish_build(
 
     // Get changelog.
     let tags = get_all_tags().await?;
-    let changelog: String;
-    if tags.len() == 1 {
-        changelog = get_all_git_log().await?;
+    let changelog = if tags.len() == 1 {
+        get_all_git_log().await?
     } else {
-        changelog = get_changelog().await?;
-    }
+        get_changelog().await?
+    };
 
     let res = ghclient
         .repos(&gh.owner, &gh.repo)
