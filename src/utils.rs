@@ -31,6 +31,59 @@ pub async fn get_all_tags() -> Result<Vec<String>> {
     Ok(out.split('\n').map(String::from).collect())
 }
 
+async fn get_previous_tag() -> Result<String> {
+    // Get previous tag's commit.
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["rev-list", "--tags", "--skip=1",  "--max-count=1"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!(
+            "error getting previous tag: {}",
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+    let prev_tag_commit = String::from_utf8_lossy(&output.stdout).to_string();
+    
+    // Get tag for the commit.
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["describe", "--abbrev=0", "--tags", &prev_tag_commit]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!(
+            "error getting previous tag: {}",
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// Get formatted git log.
+pub async fn get_all_git_log() -> Result<String> {
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["log", "--format='%h: %B'"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!(
+            "error getting git log: {}",
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub async fn get_changelog() -> Result<String> {
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["log", "--format='%h: %B'"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!(
+            "error getting git log: {}",
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 // Creates an zip archive with the file given.
 pub async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<String> {
     let mut f = tokio::fs::File::open(filename).await?;
