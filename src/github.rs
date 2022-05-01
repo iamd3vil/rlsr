@@ -60,8 +60,8 @@ pub async fn publish_build(
     upload_archives(
         all_archives.lock().unwrap().to_vec(),
         release_id,
-        String::from(owner),
-        String::from(repo),
+        owner,
+        repo,
         ghtoken,
     )
     .await?;

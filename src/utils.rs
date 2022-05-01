@@ -1,8 +1,9 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Ok, Result};
 use async_zip::write::{EntryOptions, ZipFileWriter};
 use std::path::Path;
 use tokio::process::Command;
 
+// Gets the latest tag if it exists.
 pub async fn get_latest_tag() -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.args(vec!["describe", "--abbrev=0"]);
@@ -15,6 +16,22 @@ pub async fn get_latest_tag() -> Result<String> {
     ))
 }
 
+// Gets all the tags for the current repo.
+pub async fn get_all_tags() -> Result<Vec<String>> {
+    let mut cmd = Command::new("git");
+    cmd.args(vec!["tag", "--list"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        bail!(
+            "error getting all tags: {}",
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+    let out = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok(out.split('\n').map(String::from).collect())
+}
+
+// Creates an zip archive with the file given.
 pub async fn archive_file(filename: &str, dist: &str, name: &str) -> Result<String> {
     let mut f = tokio::fs::File::open(filename).await?;
     // Create a zip file.

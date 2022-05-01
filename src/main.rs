@@ -1,7 +1,7 @@
 use clap::Parser;
+use env_logger::Env;
 use releasr::{parse_config, run};
 use std::process;
-use env_logger::Env;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
