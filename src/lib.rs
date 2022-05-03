@@ -7,33 +7,27 @@ use std::{
 };
 use tokio::{fs, process::Command};
 
-mod config;
+pub mod config;
 mod github;
 mod utils;
-use utils::archive_file;
 use config::{Build, Config, Job};
 use github::publish_build;
+use utils::archive_file;
 
-pub async fn parse_config(cfg_path: &str) -> Result<Config> {
-    let cfg_str = fs::read_to_string(&cfg_path)
-        .await
-        .with_context(|| format!("error reading config file at {}", cfg_path))?;
-    let cfg: Config = serde_yaml::from_str(&cfg_str)?;
-    Ok(cfg)
+#[derive(Debug, Clone)]
+pub struct Opts {
+    pub publish: bool,
+    pub rm_dist: bool,
 }
 
-pub async fn run(cfg: Config) -> Result<()> {
-    // Check if `GITHUB_TOKEN` is present.
-    let ghtoken = match env::var("GITHUB_TOKEN") {
-        Ok(token) => token,
-        Err(_) => {
-            warn!("`GITHUB_TOKEN` isn't set, won't publish to github.");
-            String::from("")
+pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
+    if opts.publish {
+        let ghtoken = get_github_token()?;
+        if !ghtoken.is_empty() {
+            octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken))?;
         }
-    };
-
-    if !ghtoken.is_empty() {
-        octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken.clone()))?;
+    } else {
+        warn!("--publish isn't given, so skipping publishing")
     }
 
     // let builds = cfg.builds.clone();
@@ -49,10 +43,10 @@ pub async fn run(cfg: Config) -> Result<()> {
             let all_archives = all_archives.clone();
             all_jobs.push(tokio::spawn(async move {
                 info!("executing build: {}", &builds[i].name);
-                let res = run_job(&builds[i], &builds[i].jobs[j]).await;
+                let res = run_job(&builds[i], &builds[i].jobs[j], opts.rm_dist).await;
                 match res {
                     Err(err) => {
-                        println!("error executing the job: {}", err);
+                        error!("error executing the job: {}", err);
                     }
                     Ok(archive) => {
                         all_archives.lock().unwrap().push(archive);
@@ -65,23 +59,31 @@ pub async fn run(cfg: Config) -> Result<()> {
         futures::future::join_all(&mut all_jobs).await;
 
         debug!("all archives generated: {:?}", all_archives);
-        match publish_build(&builds[i], all_archives, ghtoken.clone()).await {
-            Ok(_) => continue,
-            Err(err) => {
-                error!("{}", err);
+        if opts.publish {
+            let ghtoken = get_github_token()?;
+            match publish_build(&builds[i], all_archives, ghtoken).await {
+                Ok(_) => continue,
+                Err(err) => {
+                    error!("{}", err);
+                }
             }
         }
     }
     Ok(())
 }
 
-pub async fn run_job(build: &Build, job: &Job) -> Result<String> {
+pub async fn run_job(build: &Build, job: &Job, rm_dist: bool) -> Result<String> {
     // Split cmd into command, args.
     let cmds = job.command.split(' ').collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output().await?;
 
     // If the job executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
+        // Delete the dist directory if rm_dist is provided.
+        if rm_dist {
+            fs::remove_dir_all(&build.dist_folder).await?;
+        }
+
         // Create dist directory.
         fs::create_dir_all(&build.dist_folder).await?;
         fs::copy(
@@ -109,4 +111,12 @@ pub async fn run_job(build: &Build, job: &Job) -> Result<String> {
     }
 
     Ok(String::from(""))
+}
+
+fn get_github_token() -> Result<String> {
+    // Check if `GITHUB_TOKEN` is present.
+    match env::var("GITHUB_TOKEN") {
+        Ok(token) => Ok(token),
+        Err(_) => Ok(String::from("")),
+    }
 }
