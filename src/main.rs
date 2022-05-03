@@ -1,15 +1,15 @@
 use clap::Parser;
 use env_logger::Env;
 use log::error;
-use releasr::{run, Opts};
+use rlsr::{run, Opts};
 use std::process;
 
-use releasr::config::parse_config;
+use rlsr::config::parse_config;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(short, long, default_value = "releasr.yml")]
+    #[clap(short, long, default_value = "rlsr.yml")]
     config: String,
 
     #[clap(long, name = "rm-dist")]
@@ -40,7 +40,7 @@ async fn main() {
     };
 
     if let Err(error) = run(cfg, opts).await {
-        error!("error running releasr: {}", error);
+        error!("error running rlsr: {}", error);
         process::exit(1);
     }
 }

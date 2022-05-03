@@ -1118,26 +1118,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
-name = "releasr"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async_zip",
- "clap",
- "env_logger",
- "futures",
- "infer",
- "log",
- "octocrab",
- "reqwest",
- "serde",
- "serde_yaml",
- "tokio",
- "tokio-util 0.7.1",
- "yaml-rust",
-]
-
-[[package]]
 name = "remove_dir_all"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,6 +1183,26 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "rlsr"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async_zip",
+ "clap",
+ "env_logger",
+ "futures",
+ "infer",
+ "log",
+ "octocrab",
+ "reqwest",
+ "serde",
+ "serde_yaml",
+ "tokio",
+ "tokio-util 0.7.1",
+ "yaml-rust",
 ]
 
 [[package]]
