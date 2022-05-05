@@ -85,7 +85,10 @@ async fn upload_archives(
     repo: String,
     ghtoken: String,
 ) -> Result<()> {
-    let client = Arc::new(reqwest::Client::new());
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(100))
+        .build()?;
+    let client = Arc::new(client);
     let mut all_uploads = vec![];
     let num = archives.len();
     let archives = Arc::new(archives);
@@ -145,12 +148,13 @@ async fn upload_file(
         .send()
         .await?;
     if res.status() != reqwest::StatusCode::CREATED {
-        error!(
+        bail!(
             "error uploading to github, status: {}, error: {}",
             res.status(),
             res.text().await?
         );
     }
+
     Ok(())
 }
 

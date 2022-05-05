@@ -11,7 +11,6 @@ clap = { version = "3.1.8", features = ["derive"] }
 serde = { version = "1.0.136", features = ["std", "derive", "serde_derive"] }
 serde_yaml = "0.8.23"
 yaml-rust = "0.4.5"
-async_zip = "0.0.7"
 tokio = { version = "1", features = [ "full" ]}
 futures = "0.3.21"
 octocrab = { version = "0.16.0", features = [ "rustls" ] }
@@ -20,3 +19,4 @@ log = "0.4.16"
 tokio-util = { version = "0.7.1", features = ["codec"] }
 reqwest = { version = "0.11.10", features = ["rustls", "stream", "multipart", "rustls-tls-native-roots"] }
 infer = "0.7.0"
+zip = "0.6.2"

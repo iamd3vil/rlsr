@@ -104,9 +104,13 @@ pub async fn run_job(build: &Build, job: &Job, rm_dist: bool) -> Result<String> 
 
         // Create an archive.
         debug!("creating an archive for {}", &job.name);
-        let zip_path = archive_file(bin_path, &build.dist_folder, &job.name)
-            .await
-            .with_context(|| format!("error while creating archive for job: {}", job.name))?;
+        let zip_path = archive_file(
+            bin_path.to_owned(),
+            build.dist_folder.clone(),
+            job.name.clone(),
+        )
+        .await
+        .with_context(|| format!("error while creating archive for job: {}", job.name))?;
         return Ok(zip_path);
     }
 
