@@ -1,0 +1,11 @@
+releases:
+  - name: "Release to github"
+    dist_folder: "./dist"
+    github:
+      owner: "iamd3vil"
+      repo: "rlsr"
+    builds:
+      - command: "cargo build --release"
+        bin_name: "rlsr"
+        artifact: "./target/release/rlsr"
+        name: "rlsr-linux-x86_64"
