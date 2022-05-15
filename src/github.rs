@@ -8,11 +8,11 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 
-use crate::config::Build;
+use crate::config::Release;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog, get_latest_tag};
 
 pub async fn publish_build(
-    build: &Build,
+    build: &Release,
     all_archives: Arc<Mutex<Vec<String>>>,
     ghtoken: String,
 ) -> Result<()> {

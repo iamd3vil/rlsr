@@ -8,15 +8,15 @@ pub struct Github {
     pub repo: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Build {
+pub struct Release {
     pub name: String,
     pub dist_folder: String,
-    pub jobs: Vec<Job>,
+    pub builds: Vec<Build>,
     pub github: Option<Github>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Job {
+pub struct Build {
     pub command: String,
     pub artifact: String,
     pub bin_name: String,
@@ -25,7 +25,7 @@ pub struct Job {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub builds: Vec<Build>,
+    pub releases: Vec<Release>,
 }
 
 pub async fn parse_config(cfg_path: &str) -> Result<Config> {
