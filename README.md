@@ -47,5 +47,3 @@ releases:
         # The archive will be attached with the github release.
         name: "rlsr-linux-x86_64"
 ```
-
-- `dist_folder` is where
