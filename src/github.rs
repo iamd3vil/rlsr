@@ -2,8 +2,9 @@ use anyhow::{bail, Result};
 use log::{debug, error, info};
 use reqwest::{Body, Client};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::fs;
+use tokio::sync::Mutex;
 use tokio_util::codec::{BytesCodec, FramedRead};
 
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
@@ -66,7 +67,7 @@ pub async fn publish_build(
     let ghtoken = ghtoken.clone();
     // Upload all archives.
     upload_archives(
-        all_archives.lock().unwrap().to_vec(),
+        all_archives.lock().await.to_vec(),
         release_id,
         owner,
         repo,

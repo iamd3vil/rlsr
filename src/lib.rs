@@ -1,11 +1,7 @@
 use anyhow::{bail, Context, Result};
 use log::{debug, error, info, warn};
-use std::{
-    env,
-    path::Path,
-    sync::{Arc, Mutex},
-};
-use tokio::{fs, process::Command};
+use std::{env, path::Path, sync::Arc};
+use tokio::{fs, process::Command, sync::Mutex};
 
 pub mod config;
 mod github;
@@ -49,7 +45,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                         error!("error executing the build: {}", err);
                     }
                     Ok(archive) => {
-                        all_archives.lock().unwrap().push(archive);
+                        all_archives.lock().await.push(archive);
                     }
                 }
             }));
