@@ -58,8 +58,14 @@ impl Github {
             }
         };
 
+        debug!("creating release in {}/{}", gh.owner, gh.repo);
+
         if ghtoken.is_empty() {
             bail!("GITHUB_TOKEN is blank, skipping publishing build");
+        }
+
+        if !ghtoken.is_empty() {
+            octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken.clone()))?;
         }
 
         let ghclient = octocrab::instance();
