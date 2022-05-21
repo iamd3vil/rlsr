@@ -5,9 +5,11 @@ use tokio::{fs, process::Command, sync::Mutex};
 
 pub mod config;
 mod github;
+pub mod release_provider;
 mod utils;
+use crate::release_provider::ReleaseProvider;
 use config::{Build, Config, Release};
-use github::publish_build;
+use github::Github;
 use utils::archive_file;
 
 #[derive(Debug, Clone)]
@@ -17,19 +19,12 @@ pub struct Opts {
 }
 
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
-    if opts.publish {
-        let ghtoken = get_github_token()?;
-        if !ghtoken.is_empty() {
-            octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken))?;
-        }
-    } else {
+    if !opts.publish {
         warn!("--publish isn't given, so skipping publishing")
     }
 
-    // let builds = cfg.builds.clone();
     let num = cfg.releases.len();
     let shared: Arc<Vec<Release>> = Arc::from(cfg.releases);
-    // let all_builds = vec![];
     for i in 0..num {
         let releases = shared.clone();
         let mut all_builds = vec![];
@@ -56,16 +51,32 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         debug!("all archives generated: {:?}", all_archives);
         if opts.publish {
-            let ghtoken = get_github_token()?;
-            match publish_build(&releases[i], all_archives, ghtoken).await {
-                Ok(_) => continue,
-                Err(err) => {
-                    error!("{}", err);
+            // Make release providers from given config.
+            let providers = get_release_providers(&releases[i])?;
+            for prov in providers {
+                let all_archives = all_archives.clone();
+                match prov.publish(&releases[i], all_archives).await {
+                    Ok(_) => continue,
+                    Err(err) => {
+                        error!("{}", err);
+                    }
                 }
             }
         }
     }
     Ok(())
+}
+
+fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvider>>> {
+    let mut providers: Vec<Box<dyn ReleaseProvider>> = vec![];
+
+    // Check if github details are provided.
+    if release.github.is_some() {
+        let ghtoken = get_github_token()?;
+        let gh = Github::new(ghtoken);
+        providers.push(Box::new(gh));
+    }
+    Ok(providers)
 }
 
 pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Result<String> {

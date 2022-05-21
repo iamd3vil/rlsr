@@ -20,3 +20,4 @@ tokio-util = { version = "0.7.1", features = ["codec"] }
 reqwest = { version = "0.11.10", features = ["rustls", "stream", "multipart", "rustls-tls-native-roots"] }
 infer = "0.7.0"
 zip = "0.6.2"
+async-trait = "0.1.53"
