@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 /// different types of release targets. For example, we can implement a provider
 /// for github or docker and just call it from our main execution loop.
 #[async_trait]
+#[allow(clippy::needless_arbitrary_self_type)]
 pub trait ReleaseProvider {
     async fn publish(
         self: &Self,

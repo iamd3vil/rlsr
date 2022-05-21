@@ -128,7 +128,7 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
             Path::new(&release.dist_folder).join(&build.name),
         )
         .await
-        .with_context(|| format!("error while copying artifact to given name"))?;
+        .with_context(|| "error while copying artifact to given name")?;
 
         return Ok(Path::new(&release.dist_folder)
             .join(&build.name)
