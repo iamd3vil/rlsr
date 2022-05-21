@@ -9,3 +9,4 @@ releases:
         bin_name: "rlsr"
         artifact: "./target/release/rlsr"
         name: "rlsr-linux-x86_64"
+        no_archive: false

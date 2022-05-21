@@ -21,6 +21,9 @@ pub struct Build {
     pub artifact: String,
     pub bin_name: String,
     pub name: String,
+
+    // Doesn't an archive if given true.
+    pub no_archive: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

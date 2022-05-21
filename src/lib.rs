@@ -109,16 +109,32 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
             Some(bin_path) => bin_path,
         };
 
-        // Create an archive.
-        debug!("creating an archive for {}", &build.name);
-        let zip_path = archive_file(
-            bin_path.to_owned(),
-            release.dist_folder.clone(),
-            build.name.clone(),
+        if build.no_archive.is_none() {
+            // Create an archive.
+            debug!("creating an archive for {}", &build.name);
+            let zip_path = archive_file(
+                bin_path.to_owned(),
+                release.dist_folder.clone(),
+                build.name.clone(),
+            )
+            .await
+            .with_context(|| format!("error while creating archive for build: {}", build.name))?;
+            return Ok(zip_path);
+        }
+
+        // Copy the binary to the given name.
+        fs::copy(
+            &build.artifact,
+            Path::new(&release.dist_folder).join(&build.name),
         )
         .await
-        .with_context(|| format!("error while creating archive for build: {}", build.name))?;
-        return Ok(zip_path);
+        .with_context(|| format!("error while copying artifact to given name"))?;
+
+        return Ok(Path::new(&release.dist_folder)
+            .join(&build.name)
+            .to_str()
+            .unwrap()
+            .to_owned());
     }
 
     Ok(String::from(""))
