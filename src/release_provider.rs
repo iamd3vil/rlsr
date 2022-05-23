@@ -1,6 +1,6 @@
 use crate::config::Release;
-use anyhow::Result;
 use async_trait::async_trait;
+use eyre::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -14,5 +14,6 @@ pub trait ReleaseProvider {
         self: &Self,
         cfg: &Release,
         all_archives: Arc<Mutex<Vec<String>>>,
+        latest_tag: String,
     ) -> Result<()>;
 }

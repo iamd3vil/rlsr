@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
@@ -7,12 +7,21 @@ pub struct Github {
     pub owner: String,
     pub repo: String,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Docker {
+    pub dockerfile: String,
+    pub image: String,
+    pub context: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Release {
     pub name: String,
     pub dist_folder: String,
     pub builds: Vec<Build>,
     pub github: Option<Github>,
+    pub docker: Option<Docker>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

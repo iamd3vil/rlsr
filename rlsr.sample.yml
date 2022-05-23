@@ -4,6 +4,10 @@ releases:
     github:
       owner: "iamd3vil"
       repo: "rlsr"
+    docker:
+      image: "localhost:5000/rlsr"
+      dockerfile: "./Dockerfile"
+      context: "."
     builds:
       - command: "cargo build --release"
         bin_name: "rlsr"

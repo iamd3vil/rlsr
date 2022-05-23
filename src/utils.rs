@@ -1,6 +1,7 @@
-use anyhow::{bail, Ok, Result};
+use eyre::{bail, Result};
 // use async_zip::write::{EntryOptions, ZipFileWriter};
-use std::{fs, io, path::Path};
+use camino::Utf8Path;
+use std::{fs, io};
 use tokio::{process::Command, task};
 
 // Gets the latest tag if it exists.
@@ -102,44 +103,21 @@ pub async fn get_changelog() -> Result<String> {
 pub async fn archive_file(filename: String, dist: String, name: String) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
         let mut f = fs::File::open(&filename)?;
-        let mut zip_path = Path::new(&dist).join(name);
+        let mut zip_path = Utf8Path::new(&dist).join(name);
         zip_path.set_extension("zip");
         let zip_file = fs::File::create(&zip_path)?;
         let mut zip = zip::ZipWriter::new(zip_file);
         // // Get only filename for the archive.
-        let fpath = Path::new(&filename);
-        let fname = fpath.file_name().unwrap().to_str().unwrap();
+        let fpath = Utf8Path::new(&filename);
+        let fname = fpath.file_name().unwrap();
 
         let options = zip::write::FileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(0o744);
         zip.start_file(fname, options)?;
         io::copy(&mut f, &mut zip)?;
-        if let Some(path) = zip_path.to_str() {
-            Ok(String::from(path))
-        } else {
-            bail!("error getting archive path")
-        }
+        Ok(zip_path.to_string())
     })
     .await?;
     path
-    // // Create a zip file.
-    // let mut zip_file = tokio::fs::File::create(&zip_path).await?;
-    // let mut zip = ZipFileWriter::new(&mut zip_file);
-
-    // // Get only filename for the archive.
-    // let fpath = Path::new(filename);
-    // let fname = fpath.file_name().unwrap().to_str().unwrap();
-
-    // let options = EntryOptions::new(String::from(fname), async_zip::Compression::Deflate);
-    // let mut zw = zip.write_entry_stream(options).await?;
-    // tokio::io::copy(&mut f, &mut zw).await?;
-
-    // zw.close().await?;
-    // zip.close().await?;
-    // if let Some(path) = zip_path.to_str() {
-    //     Ok(String::from(path))
-    // } else {
-    //     bail!("error getting archive");
-    // }
 }

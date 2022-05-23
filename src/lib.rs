@@ -1,9 +1,12 @@
-use anyhow::{bail, Context, Result};
+use crate::utils::get_latest_tag;
+use camino::Utf8Path;
+use eyre::{bail, Context, Result};
 use log::{debug, error, info, warn};
-use std::{env, path::Path, sync::Arc};
+use std::{env, sync::Arc};
 use tokio::{fs, process::Command, sync::Mutex};
 
 pub mod config;
+mod docker;
 mod github;
 pub mod release_provider;
 mod utils;
@@ -51,11 +54,25 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         debug!("all archives generated: {:?}", all_archives);
         if opts.publish {
+            let latest_tag = match get_latest_tag().await {
+                Ok(tag) => {
+                    info!("found out latest tag: {}", tag);
+                    tag
+                }
+                Err(_) => {
+                    bail!("error finding tag, skipping publishing");
+                }
+            };
+            debug!("latest tag: {}", latest_tag);
+
             // Make release providers from given config.
             let providers = get_release_providers(&releases[i])?;
             for prov in providers {
                 let all_archives = all_archives.clone();
-                match prov.publish(&releases[i], all_archives).await {
+                match prov
+                    .publish(&releases[i], all_archives, latest_tag.clone())
+                    .await
+                {
                     Ok(_) => continue,
                     Err(err) => {
                         error!("{}", err);
@@ -76,6 +93,11 @@ fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvide
         let gh = Github::new(ghtoken);
         providers.push(Box::new(gh));
     }
+
+    if release.docker.is_some() {
+        providers.push(Box::new(docker::Docker::new()));
+    }
+
     Ok(providers)
 }
 
@@ -95,19 +117,13 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
         fs::create_dir_all(&release.dist_folder).await?;
         fs::copy(
             &build.artifact,
-            Path::new(&release.dist_folder).join(&build.bin_name),
+            Utf8Path::new(&release.dist_folder).join(&build.bin_name),
         )
         .await
         .with_context(|| format!("error while copying artifact: {}", build.artifact))?;
 
-        let dist_folder = Path::new(&release.dist_folder).join(&build.bin_name);
-        let bin_path = dist_folder.to_str();
-        let bin_path = match bin_path {
-            None => {
-                bail!("error creating bin path");
-            }
-            Some(bin_path) => bin_path,
-        };
+        let dist_folder = Utf8Path::new(&release.dist_folder).join(&build.bin_name);
+        let bin_path = dist_folder.to_string();
 
         if build.no_archive.is_none() {
             // Create an archive.
@@ -125,16 +141,14 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
         // Copy the binary to the given name.
         fs::copy(
             &build.artifact,
-            Path::new(&release.dist_folder).join(&build.name),
+            Utf8Path::new(&release.dist_folder).join(&build.name),
         )
         .await
         .with_context(|| "error while copying artifact to given name")?;
 
-        return Ok(Path::new(&release.dist_folder)
+        return Ok(Utf8Path::new(&release.dist_folder)
             .join(&build.name)
-            .to_str()
-            .unwrap()
-            .to_owned());
+            .to_string());
     }
 
     Ok(String::from(""))

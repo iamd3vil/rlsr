@@ -1,11 +1,11 @@
 use crate::config::Release;
 use crate::release_provider::ReleaseProvider;
-use crate::utils::{get_all_git_log, get_all_tags, get_changelog, get_latest_tag};
-use anyhow::{bail, Result};
+use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use async_trait::async_trait;
+use camino::Utf8Path;
+use eyre::{bail, Result};
 use log::{debug, error, info};
 use reqwest::{Body, Client};
-use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::Mutex;
@@ -20,8 +20,9 @@ impl ReleaseProvider for Github {
         self: &Self,
         release: &Release,
         all_archives: Arc<Mutex<Vec<String>>>,
+        latest_tag: String,
     ) -> Result<()> {
-        Self::publish_build(release, all_archives, self.ghtoken.clone()).await?;
+        Self::publish_build(release, all_archives, self.ghtoken.clone(), latest_tag).await?;
         Ok(())
     }
 }
@@ -39,19 +40,8 @@ impl Github {
         release: &Release,
         all_archives: Arc<Mutex<Vec<String>>>,
         ghtoken: String,
+        latest_tag: String,
     ) -> Result<()> {
-        // Publish to github if we can find a latest tag or github repo configured in config.
-        let latest_tag = match get_latest_tag().await {
-            Ok(tag) => {
-                info!("found out latest tag: {}", tag);
-                tag
-            }
-            Err(_) => {
-                bail!("error finding tag, skipping publishing");
-            }
-        };
-        debug!("latest tag: {}", latest_tag);
-
         let gh = match &release.github {
             Some(gh) => gh,
             None => {
@@ -124,13 +114,7 @@ impl Github {
         let archives = Arc::new(archives);
         for i in 0..num {
             let archives = archives.clone();
-            let filename = String::from(
-                Path::new(&archives[i])
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            );
+            let filename = String::from(Utf8Path::new(&archives[i]).file_name().unwrap());
             let upload_url = format!(
                 "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
                 owner, repo, release_id, filename
