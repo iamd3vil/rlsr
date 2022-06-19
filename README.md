@@ -31,10 +31,11 @@ releases:
   - name: "Github release"
     # Dist folder is where the builds will exist.
     dist_folder: "./dist"
-    # Github repo details.
-    github:
-      owner: "iamd3vil"
-      repo: "rlsr"
+    targets:
+      # Github repo details.
+      github:
+        owner: "iamd3vil"
+        repo: "rlsr"
     # Builds to execute.
     builds:
       # Command is the command to create a release build.
