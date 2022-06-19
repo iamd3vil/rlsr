@@ -42,7 +42,7 @@ impl Github {
         ghtoken: String,
         latest_tag: String,
     ) -> Result<()> {
-        let gh = match &release.github {
+        let gh = match &release.targets.github {
             Some(gh) => gh,
             None => {
                 bail!("github repo is blank, skipping publishing");
@@ -78,7 +78,7 @@ impl Github {
             .await?;
 
         let release_id = res.id.0;
-        let github = release.github.clone();
+        let github = release.targets.github.clone();
         let (owner, repo) = match github {
             Some(gh) => (gh.owner, gh.repo),
             None => bail!("couldn't find github details to publish release"),

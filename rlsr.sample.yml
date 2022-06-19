@@ -1,13 +1,14 @@
 releases:
   - name: "Release to github"
     dist_folder: "./dist"
-    github:
-      owner: "iamd3vil"
-      repo: "rlsr"
-    docker:
-      image: "localhost:5000/rlsr"
-      dockerfile: "./Dockerfile"
-      context: "."
+    targets:
+      github:
+        owner: "iamd3vil"
+        repo: "rlsr"
+      docker:
+        image: "localhost:5000/rlsr"
+        dockerfile: "./Dockerfile"
+        context: "."
     builds:
       - command: "cargo build --release"
         bin_name: "rlsr"

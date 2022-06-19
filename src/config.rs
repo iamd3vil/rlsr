@@ -15,13 +15,18 @@ pub struct Docker {
     pub context: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ReleaseTargets {
+    pub github: Option<Github>,
+    pub docker: Option<Docker>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Release {
     pub name: String,
     pub dist_folder: String,
     pub builds: Vec<Build>,
-    pub github: Option<Github>,
-    pub docker: Option<Docker>,
+    pub targets: ReleaseTargets,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

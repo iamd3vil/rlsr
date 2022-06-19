@@ -88,13 +88,13 @@ fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvide
     let mut providers: Vec<Box<dyn ReleaseProvider>> = vec![];
 
     // Check if github details are provided.
-    if release.github.is_some() {
+    if release.targets.github.is_some() {
         let ghtoken = get_github_token()?;
         let gh = Github::new(ghtoken);
         providers.push(Box::new(gh));
     }
 
-    if release.docker.is_some() {
+    if release.targets.docker.is_some() {
         providers.push(Box::new(docker::Docker::new()));
     }
 

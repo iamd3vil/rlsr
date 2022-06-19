@@ -14,7 +14,7 @@ impl Docker {
     }
 
     async fn build_image(release: &Release, latest_tag: &str) -> Result<String> {
-        let docker = match &release.docker {
+        let docker = match &release.targets.docker {
             Some(docker) => docker,
             None => {
                 bail!("missing docker config in config");
@@ -81,7 +81,7 @@ impl ReleaseProvider for Docker {
         _all_archives: Arc<Mutex<Vec<String>>>,
         latest_tag: String,
     ) -> Result<()> {
-        if release.docker.is_none() {
+        if release.targets.docker.is_none() {
             bail!("docker config can't be empty")
         }
         let image = Self::build_image(release, &latest_tag)
