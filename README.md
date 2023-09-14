@@ -2,7 +2,7 @@
 
 Rlsr is a tool to create & manage releases for your projects.
 
-Currently `rlsr` supports github releases.
+Currently `rlsr` supports github releases and docker registry.
 
 ## Usage
 

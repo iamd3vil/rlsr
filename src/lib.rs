@@ -110,7 +110,17 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
     if output.status.success() {
         // Delete the dist directory if rm_dist is provided.
         if rm_dist {
-            fs::remove_dir_all(&release.dist_folder).await?;
+            // Check if the dist directory exists.
+            match fs::metadata(&release.dist_folder).await {
+                Ok(meta) => {
+                    if meta.is_dir() {
+                        fs::remove_dir_all(&release.dist_folder).await?;
+                    } else {
+                        bail!("error deleting dist dir: not a directory");
+                    }
+                }
+                _ => {}
+            }
         }
 
         // Create dist directory.
@@ -125,7 +135,8 @@ pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Resul
         let dist_folder = Utf8Path::new(&release.dist_folder).join(&build.bin_name);
         let bin_path = dist_folder.to_string();
 
-        if build.no_archive.is_none() {
+        let no_archive = build.no_archive.map_or(false, |val| val);
+        if !no_archive {
             // Create an archive.
             debug!("creating an archive for {}", &build.name);
             let zip_path = archive_file(
