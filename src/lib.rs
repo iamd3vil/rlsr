@@ -33,12 +33,23 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         let releases = shared.clone();
         let mut all_builds = vec![];
         let all_archives = Arc::new(Mutex::new(vec![]));
+        // Delete the dist directory if rm_dist is provided.
+        if opts.rm_dist {
+            debug!("deleting dist folder for release: {}", &releases[i].name);
+            if let Ok(meta) = fs::metadata(&releases[i].dist_folder).await {
+                if meta.is_dir() {
+                    fs::remove_dir_all(&releases[i].dist_folder).await?;
+                } else {
+                    bail!("error deleting dist dir: not a directory");
+                }
+            }
+        }
         for b in 0..releases[i].builds.len() {
             let builds = shared.clone();
             let all_archives = all_archives.clone();
             all_builds.push(tokio::spawn(async move {
                 info!("executing build: {}", &builds[i].name);
-                let res = run_build(&builds[i], &builds[i].builds[b], opts.rm_dist).await;
+                let res = run_build(&builds[i], &builds[i].builds[b]).await;
                 match res {
                     Err(err) => {
                         error!("error executing the build: {}", err);
@@ -108,24 +119,13 @@ fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvide
     Ok(providers)
 }
 
-pub async fn run_build(release: &Release, build: &Build, rm_dist: bool) -> Result<String> {
+pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
     // Split cmd into command, args.
     let cmds = build.command.split(' ').collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output().await?;
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
-        // Delete the dist directory if rm_dist is provided.
-        if rm_dist {
-            if let Ok(meta) = fs::metadata(&release.dist_folder).await {
-                if meta.is_dir() {
-                    fs::remove_dir_all(&release.dist_folder).await?;
-                } else {
-                    bail!("error deleting dist dir: not a directory");
-                }
-            }
-        }
-
         // Create dist directory.
         fs::create_dir_all(&release.dist_folder).await?;
         fs::copy(
@@ -177,7 +177,9 @@ async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>>>) 
     let cm_path = Utf8Path::new(&rls.dist_folder).join("checksums.txt");
     if let Ok(_) = fs::metadata(&cm_path).await {
         // Remove checksums file if it exists.
-        fs::remove_file(&cm_path).await?;
+        fs::remove_file(&cm_path)
+            .await
+            .wrap_err_with(|| "error deleting checksums file")?;
     }
 
     // Open the file with options set to both create (if it doesn't exist) and append
@@ -185,7 +187,8 @@ async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>>>) 
         .create(true) // create if it doesn't exist
         .append(true) // set to append mode
         .open(&cm_path)
-        .await?;
+        .await
+        .wrap_err_with(|| format!("error creating checksums file"))?;
     let archives = all_archives.lock().await.clone();
     for arc in archives {
         let path = Utf8Path::new(&arc);
@@ -200,8 +203,9 @@ async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>>>) 
             &checksum
         );
         // Write the name and checksum to the file
-        file.write(format!("{}\t{}\n", path.file_name().unwrap(), checksum).as_bytes())
-            .await?;
+        file.write_all(format!("{}\t{}\n", path.file_name().unwrap(), checksum).as_bytes())
+            .await
+            .wrap_err_with(|| format!("error writing checksums to file"))?;
 
         file.flush().await?;
     }
