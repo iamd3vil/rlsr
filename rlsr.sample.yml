@@ -9,6 +9,8 @@ releases:
         image: "localhost:5000/rlsr"
         dockerfile: "./Dockerfile"
         context: "."
+    checksum:
+      algorithm: "sha256"
     builds:
       - command: "cargo build --release"
         bin_name: "rlsr"

@@ -2,3 +2,4 @@
 dist/
 rlsr.yml
 .envrc
+.idea/

@@ -27,6 +27,12 @@ pub struct Release {
     pub dist_folder: String,
     pub builds: Vec<Build>,
     pub targets: ReleaseTargets,
+    pub checksum: Option<Checksum>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Checksum {
+    pub algorithm: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -4,6 +4,9 @@ use eyre::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+pub mod github;
+pub mod docker;
+
 /// ReleaseProvider is the trait which needs to be implemented for all the
 /// different types of release targets. For example, we can implement a provider
 /// for github or docker and just call it from our main execution loop.

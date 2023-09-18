@@ -55,11 +55,9 @@ impl Github {
             bail!("GITHUB_TOKEN is blank, skipping publishing build");
         }
 
-        if !ghtoken.is_empty() {
-            octocrab::initialise(octocrab::Octocrab::builder().personal_token(ghtoken.clone()))?;
-        }
-
-        let ghclient = octocrab::instance();
+        let ghclient = octocrab::OctocrabBuilder::default()
+            .personal_token(ghtoken.clone())
+            .build()?;
 
         // Get changelog.
         let tags = get_all_tags().await?;
