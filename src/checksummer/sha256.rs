@@ -1,4 +1,4 @@
-use crate::checksum::Checksummer;
+use crate::checksummer::Checksummer;
 use async_trait::async_trait;
 use eyre::Result;
 use sha2::Digest;
