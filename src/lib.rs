@@ -1,4 +1,4 @@
-use crate::utils::get_latest_tag;
+use crate::utils::{get_latest_tag, is_at_latest_tag, is_repo_clean};
 use camino::Utf8Path;
 use eyre::{bail, Context, Result};
 use log::{debug, error, info, warn};
@@ -25,6 +25,19 @@ pub struct Opts {
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     if !opts.publish {
         warn!("--publish isn't given, so skipping publishing")
+    }
+
+    let is_clean = is_repo_clean().await?;
+    let at_latest_tag = is_at_latest_tag().await?;
+
+    debug!("is_clean: {}, at_latest_tag: {}", is_clean, at_latest_tag);
+
+    // Check if the repo is in a clean state and tagged.
+    match (is_clean, at_latest_tag) {
+        (true, true) => println!("Clean and at latest tag"),
+        (_, _) => {
+            warn!("repo is not clean and tagged to latest");
+        }
     }
 
     let num = cfg.releases.len();

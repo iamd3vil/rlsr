@@ -99,6 +99,41 @@ pub async fn get_changelog() -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+pub async fn is_repo_clean() -> Result<bool> {
+    let output = Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .arg("-uno")
+        .output()
+        .await?;
+
+    Ok(output.stdout.is_empty())
+}
+
+pub async fn is_at_latest_tag() -> Result<bool> {
+    let head_output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()
+        .await?;
+
+    let tag_output = Command::new("git")
+        .arg("rev-list")
+        .arg("--tags")
+        .arg("--max-count=1")
+        .output()
+        .await?;
+
+    let head_commit = String::from_utf8_lossy(&head_output.stdout)
+        .trim()
+        .to_string();
+    let latest_tag_commit = String::from_utf8_lossy(&tag_output.stdout)
+        .trim()
+        .to_string();
+
+    Ok(head_commit == latest_tag_commit)
+}
+
 // Creates an zip archive with the file given.
 pub async fn archive_file(filename: String, dist: String, name: String) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
