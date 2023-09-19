@@ -23,8 +23,10 @@ pub struct Opts {
 }
 
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
+    let mut publish = opts.publish;
     if !opts.publish {
-        warn!("--publish isn't given, so skipping publishing")
+        warn!("--publish isn't given, so skipping publishing");
+        publish = false
     }
 
     let is_clean = is_repo_clean().await?;
@@ -33,11 +35,9 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     debug!("is_clean: {}, at_latest_tag: {}", is_clean, at_latest_tag);
 
     // Check if the repo is in a clean state and tagged.
-    match (is_clean, at_latest_tag) {
-        (true, true) => println!("Clean and at latest tag"),
-        (_, _) => {
-            warn!("repo is not clean and tagged to latest");
-        }
+    if !(is_clean && at_latest_tag) {
+        warn!("repo is not clean and the latest commit is not tagged, skipping publishing");
+        publish = false
     }
 
     let num = cfg.releases.len();
@@ -84,7 +84,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         }
 
         debug!("all builds are done: {:?}", all_archives);
-        if opts.publish {
+        if publish {
             let latest_tag = match get_latest_tag().await {
                 Ok(tag) => {
                     info!("found out latest tag: {}", tag);
