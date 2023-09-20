@@ -153,7 +153,7 @@ impl Github {
             let checksum_ghtoken = ghtoken.clone();
             let upload_url = format!(
                 "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
-                checksum_owner, repo, release_id, checksum_path
+                checksum_owner, repo, release_id, "checksums.txt",
             );
             all_uploads.push(tokio::spawn(async move {
                 let res = Self::upload_file(
