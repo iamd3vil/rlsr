@@ -190,12 +190,12 @@ impl Github {
         let mime_type = match infer::get_from_path(&filepath)? {
             Some(mime_type) => mime_type.to_string(),
             None => {
-                let ext = Utf8Path::new(&filepath).extension();
-                if ext.is_some() && ext.unwrap() == "txt" {
-                    String::from("text/plain")
-                } else {
-                    String::from("application/octet-stream")
-                }
+                String::from("application/octet-stream")
+                // let ext = Utf8Path::new(&filepath).extension();
+                // if ext.is_some() && ext.unwrap() == "txt" {
+                //     String::from("text/plain")
+                // } else {
+                // }
             }
         };
 
