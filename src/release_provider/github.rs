@@ -82,7 +82,9 @@ impl Github {
             None => bail!("couldn't find github details to publish release"),
         };
         let ghtoken = ghtoken.clone();
-        let mut checksum_path = Utf8Path::new(&release.dist_folder).to_string();
+        let mut checksum_path = Utf8Path::new(&release.dist_folder)
+            .join("checksums.txt")
+            .to_string();
         if release.checksum.is_none() {
             checksum_path = String::from("");
         }
