@@ -162,6 +162,10 @@ impl Github {
                     checksum_ghtoken,
                 )
                 .await;
+                if let Err(err) = res {
+                    error!("error uploading checksum file {}: {}", checksum_path, err);
+                    std::process::exit(1);
+                }
             }))
         }
 
