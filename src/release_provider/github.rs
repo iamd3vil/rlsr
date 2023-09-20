@@ -82,6 +82,10 @@ impl Github {
             None => bail!("couldn't find github details to publish release"),
         };
         let ghtoken = ghtoken.clone();
+        let mut checksum_path = Utf8Path::new(&release.dist_folder).to_string();
+        if release.checksum.is_none() {
+            checksum_path = String::from("");
+        }
         // Upload all archives.
         Self::upload_archives(
             all_archives.lock().await.to_vec(),
@@ -89,6 +93,7 @@ impl Github {
             owner,
             repo,
             ghtoken,
+            checksum_path,
         )
         .await?;
 
@@ -102,6 +107,7 @@ impl Github {
         owner: String,
         repo: String,
         ghtoken: String,
+        checksum_path: String,
     ) -> Result<()> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(100))
@@ -113,23 +119,50 @@ impl Github {
         for i in 0..num {
             let archives = archives.clone();
             let filename = String::from(Utf8Path::new(&archives[i]).file_name().unwrap());
+
+            let upload_owner = owner.clone();
+            let upload_ghtoken = ghtoken.clone();
+            let ghclient = client.clone();
             let upload_url = format!(
                 "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
-                owner, repo, release_id, filename
+                upload_owner, repo, release_id, filename
             );
-            let ghclient = client.clone();
-            let ghtoken = ghtoken.clone();
-            let owner = owner.clone();
             all_uploads.push(tokio::spawn(async move {
                 debug!("uploading to url: {}", upload_url);
-                let res =
-                    Self::upload_file(upload_url, archives[i].clone(), ghclient, owner, ghtoken)
-                        .await;
+                let res = Self::upload_file(
+                    upload_url,
+                    archives[i].clone(),
+                    ghclient,
+                    upload_owner,
+                    upload_ghtoken,
+                )
+                .await;
                 if let Err(err) = res {
                     error!("error uploading archive {}: {}", archives[i], err);
                     std::process::exit(1);
                 }
             }));
+        }
+        // Upload checksum.
+        if !checksum_path.is_empty() {
+            debug!("uploading checksums file");
+            let ghclient = client.clone();
+            let checksum_owner = owner.clone();
+            let checksum_ghtoken = ghtoken.clone();
+            let upload_url = format!(
+                "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
+                checksum_owner, repo, release_id, checksum_path
+            );
+            all_uploads.push(tokio::spawn(async move {
+                let res = Self::upload_file(
+                    upload_url,
+                    checksum_path.clone(),
+                    ghclient,
+                    checksum_owner,
+                    checksum_ghtoken,
+                )
+                .await;
+            }))
         }
 
         futures::future::join_all(all_uploads).await;
