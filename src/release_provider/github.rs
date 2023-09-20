@@ -187,7 +187,17 @@ impl Github {
         let size = meta.len();
 
         // Guess mime.
-        let mime_type = infer::get_from_path(&filepath)?.unwrap().mime_type();
+        let mime_type = match infer::get_from_path(&filepath)? {
+            Some(mime_type) => mime_type.to_string(),
+            None => {
+                let ext = Utf8Path::new(&filepath).extension();
+                if ext.is_some() && ext.unwrap() == "txt" {
+                    String::from("text/plain")
+                } else {
+                    String::from("application/octet-stream")
+                }
+            }
+        };
 
         // Open file.
         let f = tokio::fs::File::open(&filepath).await?;
