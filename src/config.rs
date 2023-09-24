@@ -1,6 +1,8 @@
-use eyre::{Context, Result};
+use config::FileFormat;
+use eyre::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use tokio::fs;
+// use tokio::fs;
+// use config::Config;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Github {
@@ -42,8 +44,11 @@ pub struct Build {
     pub bin_name: String,
     pub name: String,
 
-    // Doesn't an archive if given true.
+    // Doesn't create an archive if given true.
     pub no_archive: Option<bool>,
+
+    // Additonal files to be included in the archive.
+    pub additional_files: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -51,10 +56,20 @@ pub struct Config {
     pub releases: Vec<Release>,
 }
 
-pub async fn parse_config(cfg_path: &str) -> Result<Config> {
-    let cfg_str = fs::read_to_string(&cfg_path)
-        .await
-        .with_context(|| format!("error reading config file at {}", cfg_path))?;
-    let cfg: Config = serde_yaml::from_str(&cfg_str)?;
-    Ok(cfg)
+pub fn parse_config(cfg_path: &str) -> Result<Config> {
+    let settings = config::Config::builder()
+        .add_source(config::File::new(cfg_path, FileFormat::Yaml))
+        .build();
+
+    match settings {
+        Ok(c) => {
+            let cfg: Config = c
+                .try_deserialize()
+                .wrap_err_with(|| "error deserializing to config")?;
+            Ok(cfg)
+        }
+        Err(err) => {
+            bail!("error reading config: {}", err);
+        }
+    }
 }

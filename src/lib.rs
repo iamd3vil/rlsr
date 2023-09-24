@@ -14,7 +14,7 @@ mod utils;
 
 use crate::release_provider::ReleaseProvider;
 use config::{Build, Config, Release};
-use utils::archive_file;
+use utils::archive_files;
 
 #[derive(Debug, Clone)]
 pub struct Opts {
@@ -155,13 +155,20 @@ pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
         if !no_archive {
             // Create an archive.
             debug!("creating an archive for {}", &build.name);
-            let zip_path = archive_file(
-                bin_path.to_owned(),
-                release.dist_folder.clone(),
-                build.name.clone(),
-            )
-            .await
-            .with_context(|| format!("error while creating archive for build: {}", build.name))?;
+
+            // Add all files that needs to be archived.
+            let mut files = vec![bin_path.to_owned()];
+            if let Some(additional_files) = &build.additional_files {
+                files.extend_from_slice(&additional_files);
+            }
+
+            debug!("files being archived: {:?}", files);
+
+            let zip_path = archive_files(files, release.dist_folder.clone(), build.name.clone())
+                .await
+                .with_context(|| {
+                    format!("error while creating archive for build: {}", build.name)
+                })?;
             return Ok(zip_path);
         }
 

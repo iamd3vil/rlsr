@@ -26,7 +26,7 @@ async fn main() {
     let args = Args::parse();
     let config = args.config;
 
-    let cfg = parse_config(&config).await;
+    let cfg = parse_config(&config);
     let cfg = match cfg {
         Ok(cfg) => cfg,
         Err(err) => {

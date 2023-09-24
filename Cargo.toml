@@ -30,3 +30,4 @@ color-eyre = { version = "0.6", default-features = false }
 eyre = "0.6.8"
 camino = "1.0.9"
 sha2 = "0.10.7"
+config = { version = "0.13.3", features = ["yaml", "yaml-rust"] }

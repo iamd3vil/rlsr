@@ -17,3 +17,6 @@ releases:
         artifact: "./target/release/rlsr"
         name: "rlsr-linux-x86_64"
         no_archive: false
+        additional_files:
+          - "README.md"
+          - "LICENSE"

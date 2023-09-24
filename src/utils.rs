@@ -135,22 +135,24 @@ pub async fn is_at_latest_tag() -> Result<bool> {
 }
 
 // Creates an zip archive with the file given.
-pub async fn archive_file(filename: String, dist: String, name: String) -> Result<String> {
+pub async fn archive_files(filenames: Vec<String>, dist: String, name: String) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
-        let mut f = fs::File::open(&filename)?;
         let mut zip_path = Utf8Path::new(&dist).join(name);
         zip_path.set_extension("zip");
         let zip_file = fs::File::create(&zip_path)?;
         let mut zip = zip::ZipWriter::new(zip_file);
-        // // Get only filename for the archive.
-        let fpath = Utf8Path::new(&filename);
-        let fname = fpath.file_name().unwrap();
+        for filename in filenames {
+            let mut f = fs::File::open(&filename)?;
+            // Get only filename for the archive.
+            let fpath = Utf8Path::new(&filename);
+            let fname = fpath.file_name().unwrap();
 
-        let options = zip::write::FileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated)
-            .unix_permissions(0o744);
-        zip.start_file(fname, options)?;
-        io::copy(&mut f, &mut zip)?;
+            let options = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .unix_permissions(0o744);
+            zip.start_file(fname, options)?;
+            io::copy(&mut f, &mut zip)?;
+        }
         Ok(zip_path.to_string())
     })
     .await?;

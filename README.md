@@ -47,4 +47,10 @@ releases:
         # Name of the archive that will be created with the built binary.
         # The archive will be attached with the github release.
         name: "rlsr-linux-x86_64"
+        # If no_archive is given, rlsr won't create a archive and only uploads the binary.
+        no_archive: false
+
+        # Additional files to be added in archives.
+        additional_files:
+          - "README.md"
 ```
