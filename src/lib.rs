@@ -57,6 +57,10 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 }
             }
         }
+
+        // Create dist directory.
+        fs::create_dir_all(&releases[i].dist_folder).await?;
+
         for b in 0..releases[i].builds.len() {
             let builds = shared.clone();
             let all_archives = all_archives.clone();
@@ -133,14 +137,13 @@ fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvide
 }
 
 pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
+    debug!("executing command: {}", build.command);
     // Split cmd into command, args.
     let cmds = build.command.split(' ').collect::<Vec<&str>>();
     let output = Command::new(cmds[0]).args(&cmds[1..]).output().await?;
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
-        // Create dist directory.
-        fs::create_dir_all(&release.dist_folder).await?;
         fs::copy(
             &build.artifact,
             Utf8Path::new(&release.dist_folder).join(&build.bin_name),
