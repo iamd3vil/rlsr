@@ -1,11 +1,11 @@
 use crate::config::Release;
 use async_trait::async_trait;
-use eyre::Result;
+use color_eyre::eyre::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub mod github;
 pub mod docker;
+pub mod github;
 
 /// ReleaseProvider is the trait which needs to be implemented for all the
 /// different types of release targets. For example, we can implement a provider

@@ -1,4 +1,4 @@
-use eyre::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 // use async_zip::write::{EntryOptions, ZipFileWriter};
 use camino::Utf8Path;
 use std::{fs, io};

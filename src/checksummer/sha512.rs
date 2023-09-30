@@ -1,6 +1,6 @@
 use crate::checksummer::Checksummer;
 use async_trait::async_trait;
-use eyre::Result;
+use color_eyre::eyre::Result;
 use sha2::Digest;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;

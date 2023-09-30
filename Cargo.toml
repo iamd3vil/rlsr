@@ -24,10 +24,12 @@ reqwest = { version = "0.11.10", features = [
     "rustls-tls-native-roots",
 ] }
 infer = "0.7.0"
-zip = "0.6.2"
+zip = { version = "0.6.2", default-features = false, features = [
+    "deflate",
+    "bzip2",
+] }
 async-trait = "0.1.73"
 color-eyre = { version = "0.6", default-features = false }
-eyre = "0.6.8"
 camino = "1.0.9"
 sha2 = "0.10.7"
 config = { version = "0.13.3", features = ["yaml", "yaml-rust"] }

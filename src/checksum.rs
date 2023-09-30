@@ -1,7 +1,7 @@
 use crate::checksummer::get_new_checksummer;
 use crate::Release;
 use camino::Utf8Path;
-use eyre::{Context, Result};
+use color_eyre::eyre::{Context, Result};
 use log::debug;
 use std::sync::Arc;
 use tokio::{fs, io::AsyncWriteExt, sync::Mutex};

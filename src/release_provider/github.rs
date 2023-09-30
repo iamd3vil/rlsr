@@ -3,7 +3,7 @@ use crate::release_provider::ReleaseProvider;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use async_trait::async_trait;
 use camino::Utf8Path;
-use eyre::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 use log::{debug, error, info};
 use reqwest::{Body, Client};
 use std::sync::Arc;

@@ -1,7 +1,7 @@
 use crate::config::Release;
 use crate::release_provider::ReleaseProvider;
 use async_trait::async_trait;
-use eyre::{bail, Context, Result};
+use color_eyre::eyre::{bail, Context, Result};
 use log::info;
 use std::sync::Arc;
 use tokio::{process::Command, sync::Mutex};

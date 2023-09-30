@@ -4,7 +4,7 @@ mod sha256;
 mod sha512;
 
 use async_trait::async_trait;
-use eyre::{bail, Result};
+use color_eyre::eyre::{bail, Result};
 
 use self::sha256::Sha256;
 use self::sha512::Sha512;

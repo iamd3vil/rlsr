@@ -1,5 +1,5 @@
+use color_eyre::eyre::{bail, Context, Result};
 use config::FileFormat;
-use eyre::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 // use tokio::fs;
 // use config::Config;

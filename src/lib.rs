@@ -1,6 +1,6 @@
 use crate::utils::{get_latest_tag, is_at_latest_tag, is_repo_clean};
 use camino::Utf8Path;
-use eyre::{bail, Context, Result};
+use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, warn};
 use release_provider::{docker, github::Github};
 use std::{env, sync::Arc};
