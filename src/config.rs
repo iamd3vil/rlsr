@@ -30,6 +30,9 @@ pub struct Release {
     pub builds: Vec<Build>,
     pub targets: ReleaseTargets,
     pub checksum: Option<Checksum>,
+
+    // Additonal files to be included in the archive.
+    pub additional_files: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

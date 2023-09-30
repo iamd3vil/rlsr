@@ -62,11 +62,11 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         fs::create_dir_all(&releases[i].dist_folder).await?;
 
         for b in 0..releases[i].builds.len() {
-            let builds = shared.clone();
+            let releases = shared.clone();
             let all_archives = all_archives.clone();
             all_builds.push(tokio::spawn(async move {
-                info!("executing build: {}", &builds[i].name);
-                let res = run_build(&builds[i], &builds[i].builds[b]).await;
+                info!("executing build: {}", &releases[i].name);
+                let res = run_build(&releases[i], &releases[i].builds[b]).await;
                 match res {
                     Err(err) => {
                         error!("error executing the build: {}", err);
@@ -164,6 +164,15 @@ pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
             if let Some(additional_files) = &build.additional_files {
                 files.extend_from_slice(&additional_files);
             }
+
+            // Add any additional files defined in the release.
+            if let Some(rls_additional_files) = &release.additional_files {
+                files.extend_from_slice(&rls_additional_files);
+            }
+
+            // Sort and only keep the uniq files.
+            files.sort_unstable();
+            files.dedup();
 
             debug!("files being archived: {:?}", files);
 

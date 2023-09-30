@@ -3,3 +3,4 @@ dist/
 rlsr.yml
 .envrc
 .idea/
+rlsr.local.yml
