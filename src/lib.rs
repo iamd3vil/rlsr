@@ -1,7 +1,8 @@
-use crate::utils::{get_latest_tag, is_at_latest_tag, is_repo_clean};
+use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
 use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, warn};
+use new_string_template::template::Template;
 use release_provider::{docker, github::Github};
 use std::{env, sync::Arc};
 use tokio::{fs, process::Command, sync::Mutex};
@@ -14,6 +15,7 @@ mod utils;
 
 use crate::release_provider::ReleaseProvider;
 use config::{Build, Config, Release};
+use std::collections::HashMap;
 use utils::archive_files;
 
 #[derive(Debug, Clone)]
@@ -61,12 +63,30 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         // Create dist directory.
         fs::create_dir_all(&releases[i].dist_folder).await?;
 
+        let template_meta = {
+            let mut template_meta: HashMap<&str, String> = HashMap::new();
+            let tag: String;
+            if is_at_latest_tag().await? {
+                tag = get_latest_tag().await?;
+            } else {
+                tag = get_latest_commit_hash().await?;
+            }
+            debug!("tag: {}", tag);
+            template_meta.insert("tag", tag);
+
+            Arc::new(template_meta)
+        };
+
         for b in 0..releases[i].builds.len() {
             let releases = shared.clone();
             let all_archives = all_archives.clone();
+            let template_meta = template_meta.clone();
             all_builds.push(tokio::spawn(async move {
-                info!("executing build: {}", &releases[i].name);
-                let res = run_build(&releases[i], &releases[i].builds[b]).await;
+                let name = &releases[i].builds[b].name;
+                if let Some(name) = name {
+                    info!("executing build: {}", name);
+                }
+                let res = run_build(&releases[i], &releases[i].builds[b], &template_meta).await;
                 match res {
                     Err(err) => {
                         error!("error executing the build: {}", err);
@@ -136,7 +156,11 @@ fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvide
     Ok(providers)
 }
 
-pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
+pub async fn run_build(
+    release: &Release,
+    build: &Build,
+    meta: &HashMap<&str, String>,
+) -> Result<String> {
     debug!("executing command: {}", build.command);
     // Split cmd into command, args.
     let cmds = build.command.split(' ').collect::<Vec<&str>>();
@@ -144,20 +168,25 @@ pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
+        let bin_name_tmpl = Template::new(&build.bin_name);
+        let bin_name = bin_name_tmpl.render(meta)?;
         fs::copy(
             &build.artifact,
-            Utf8Path::new(&release.dist_folder).join(&build.bin_name),
+            Utf8Path::new(&release.dist_folder).join(&bin_name),
         )
         .await
         .with_context(|| format!("error while copying artifact: {}", build.artifact))?;
 
-        let dist_folder = Utf8Path::new(&release.dist_folder).join(&build.bin_name);
-        let bin_path = dist_folder.to_string();
+        let bin_path = Utf8Path::new(&release.dist_folder)
+            .join(&bin_name)
+            .to_string();
 
+        let archive_name_tpl = Template::new(&build.archive_name);
+        let archive_name = archive_name_tpl.render(&meta)?;
         let no_archive = build.no_archive.map_or(false, |val| val);
         if !no_archive {
             // Create an archive.
-            debug!("creating an archive for {}", &build.name);
+            debug!("creating an archive for {}", &archive_name);
 
             // Add all files that needs to be archived.
             let mut files = vec![bin_path.to_owned()];
@@ -176,10 +205,10 @@ pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
 
             debug!("files being archived: {:?}", files);
 
-            let zip_path = archive_files(files, release.dist_folder.clone(), build.name.clone())
+            let zip_path = archive_files(files, release.dist_folder.clone(), archive_name.clone())
                 .await
                 .with_context(|| {
-                    format!("error while creating archive for build: {}", build.name)
+                    format!("error while creating archive for build: {}", archive_name)
                 })?;
             return Ok(zip_path);
         }
@@ -187,13 +216,13 @@ pub async fn run_build(release: &Release, build: &Build) -> Result<String> {
         // Copy the binary to the given name.
         fs::copy(
             &build.artifact,
-            Utf8Path::new(&release.dist_folder).join(&build.name),
+            Utf8Path::new(&release.dist_folder).join(&archive_name),
         )
         .await
         .with_context(|| "error while copying artifact to given name")?;
 
         return Ok(Utf8Path::new(&release.dist_folder)
-            .join(&build.name)
+            .join(&archive_name)
             .to_string());
     }
 

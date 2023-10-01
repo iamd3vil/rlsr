@@ -45,7 +45,8 @@ pub struct Build {
     pub command: String,
     pub artifact: String,
     pub bin_name: String,
-    pub name: String,
+    pub archive_name: String,
+    pub name: Option<String>,
 
     // Doesn't create an archive if given true.
     pub no_archive: Option<bool>,

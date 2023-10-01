@@ -1,4 +1,4 @@
-use color_eyre::eyre::{bail, Result};
+use color_eyre::eyre::{bail, Context, Result};
 // use async_zip::write::{EntryOptions, ZipFileWriter};
 use camino::Utf8Path;
 use std::{fs, io};
@@ -132,6 +132,23 @@ pub async fn is_at_latest_tag() -> Result<bool> {
         .to_string();
 
     Ok(head_commit == latest_tag_commit)
+}
+
+pub async fn get_latest_commit_hash() -> Result<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("--short")
+        .arg("HEAD")
+        .output()
+        .await
+        .wrap_err_with(|| "error running git rev-parse")?;
+
+    if !output.status.success() {
+        bail!("Failed to fetch git commit ID: {}", &output.status);
+    }
+
+    let commit_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(commit_id)
 }
 
 // Creates an zip archive with the file given.

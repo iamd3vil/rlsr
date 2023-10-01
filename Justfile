@@ -1,7 +1,7 @@
 default: build-linux
 
 run:
-    cargo run -- --rm-dist --config rlsr.local.yml
+    cargo run --release -- --rm-dist --config rlsr.local.yml
 
 build:
     cargo build
