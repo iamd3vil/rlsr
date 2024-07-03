@@ -2,8 +2,16 @@ use color_eyre::eyre::{bail, Context, Result};
 // use async_zip::write::{EntryOptions, ZipFileWriter};
 use camino::Utf8Path;
 use log::debug;
+use std::cmp::Ord;
 use std::{fs, io};
 use tokio::{process::Command, task};
+
+/// ArchiveFile has the filename on the disk and the filename in the archive.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub(crate) struct ArchiveFile {
+    pub disk_path: String,
+    pub archive_filename: String,
+}
 
 // Gets the latest tag if it exists.
 pub async fn get_latest_tag() -> Result<String> {
@@ -153,23 +161,24 @@ pub async fn get_latest_commit_hash() -> Result<String> {
 }
 
 // Creates an zip archive with the file given.
-pub async fn archive_files(filenames: Vec<String>, dist: String, name: String) -> Result<String> {
+pub async fn archive_files(
+    filenames: Vec<ArchiveFile>,
+    dist: String,
+    name: String,
+) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
         let zip_file_name = Utf8Path::new(&dist).join(name);
         let zip_path = format!("{}.zip", zip_file_name);
         debug!("creating archive: {:?}", zip_path);
         let zip_file = fs::File::create(&zip_path)?;
         let mut zip = zip::ZipWriter::new(zip_file);
-        for filename in filenames {
-            let mut f = fs::File::open(&filename)?;
-            // Get only filename for the archive.
-            let fpath = Utf8Path::new(&filename);
-            let fname = fpath.file_name().unwrap();
+        for file in filenames {
+            let mut f = fs::File::open(&file.disk_path)?;
 
             let options = zip::write::FileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .unix_permissions(0o744);
-            zip.start_file(fname, options)?;
+            zip.start_file(file.archive_filename, options)?;
             io::copy(&mut f, &mut zip)?;
         }
         Ok(zip_path.to_string())

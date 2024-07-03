@@ -43,7 +43,7 @@ pub struct Checksum {
 pub struct Build {
     pub command: String,
     pub artifact: String,
-    pub bin_name: String,
+    pub bin_name: Option<String>,
     pub archive_name: String,
     pub name: Option<String>,
 
@@ -65,6 +65,8 @@ pub fn parse_config(cfg_path: &str) -> Result<Config> {
     let source = match file_ext.extension() {
         Some("toml") => FileFormat::Toml,
         Some("yaml") => FileFormat::Yaml,
+        Some("yml") => FileFormat::Yaml,
+        Some("json") => FileFormat::Json,
         _ => {
             bail!("unsupported file format");
         }

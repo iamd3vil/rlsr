@@ -1,6 +1,6 @@
 use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
 use camino::Utf8Path;
-use color_eyre::eyre::{bail, Context, Result};
+use color_eyre::eyre::{bail, Context, ContextCompat, Result};
 use log::{debug, error, info, warn};
 use new_string_template::template::Template;
 use release_provider::{docker, github::Github};
@@ -16,7 +16,7 @@ mod utils;
 use crate::release_provider::ReleaseProvider;
 use config::{Build, Config, Release};
 use std::collections::HashMap;
-use utils::archive_files;
+use utils::{archive_files, ArchiveFile};
 
 #[derive(Debug, Clone)]
 pub struct Opts {
@@ -167,7 +167,8 @@ pub async fn run_build(
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
-        let bin_name_tmpl = Template::new(&build.bin_name);
+        let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
+        let bin_name_tmpl = Template::new(bin_name);
         let bin_name = bin_name_tmpl.render(meta)?;
         fs::copy(
             &build.artifact,
@@ -187,15 +188,43 @@ pub async fn run_build(
             // Create an archive.
             debug!("creating an archive for {}", &archive_name);
 
+            // Get the binary name from artifact.
+            // This is the filename of the binary in the archive.
+
+            let artifact_path = Utf8Path::new(&build.artifact);
+            let bin_name = artifact_path.file_name().with_context(|| {
+                format!("error getting filename from artifact: {}", &build.artifact)
+            })?;
+
             // Add all files that needs to be archived.
-            let mut files = vec![bin_path.to_owned()];
+            let bin_file = ArchiveFile {
+                disk_path: bin_path.clone(),
+                archive_filename: bin_name.to_string(),
+            };
+            let mut files = vec![bin_file];
             if let Some(additional_files) = &build.additional_files {
-                files.extend_from_slice(additional_files);
+                files.extend(
+                    additional_files
+                        .iter()
+                        .map(|f| ArchiveFile {
+                            disk_path: f.clone(),
+                            archive_filename: Utf8Path::new(f).file_name().unwrap().to_string(),
+                        })
+                        .collect::<Vec<ArchiveFile>>(),
+                );
             }
 
             // Add any additional files defined in the release.
             if let Some(rls_additional_files) = &release.additional_files {
-                files.extend_from_slice(rls_additional_files);
+                files.extend(
+                    rls_additional_files
+                        .iter()
+                        .map(|f| ArchiveFile {
+                            disk_path: f.clone(),
+                            archive_filename: Utf8Path::new(f).file_name().unwrap().to_string(),
+                        })
+                        .collect::<Vec<ArchiveFile>>(),
+                );
             }
 
             // Sort and only keep the uniq files.
