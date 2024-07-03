@@ -1,6 +1,7 @@
 use color_eyre::eyre::{bail, Context, Result};
 // use async_zip::write::{EntryOptions, ZipFileWriter};
 use camino::Utf8Path;
+use log::debug;
 use std::{fs, io};
 use tokio::{process::Command, task};
 
@@ -154,8 +155,9 @@ pub async fn get_latest_commit_hash() -> Result<String> {
 // Creates an zip archive with the file given.
 pub async fn archive_files(filenames: Vec<String>, dist: String, name: String) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
-        let mut zip_path = Utf8Path::new(&dist).join(name);
-        zip_path.set_extension("zip");
+        let zip_file_name = Utf8Path::new(&dist).join(name);
+        let zip_path = format!("{}.zip", zip_file_name);
+        debug!("creating archive: {:?}", zip_path);
         let zip_file = fs::File::create(&zip_path)?;
         let mut zip = zip::ZipWriter::new(zip_file);
         for filename in filenames {

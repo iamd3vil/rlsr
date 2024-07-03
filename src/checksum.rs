@@ -8,7 +8,7 @@ use tokio::{fs, io::AsyncWriteExt, sync::Mutex};
 
 pub async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>>>) -> Result<()> {
     let cm_path = Utf8Path::new(&rls.dist_folder).join("checksums.txt");
-    if let Ok(_) = fs::metadata(&cm_path).await {
+    if fs::metadata(&cm_path).await.is_ok() {
         // Remove checksums file if it exists.
         fs::remove_file(&cm_path)
             .await
@@ -21,7 +21,7 @@ pub async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>
         .append(true) // set to append mode
         .open(&cm_path)
         .await
-        .wrap_err_with(|| format!("error creating checksums file"))?;
+        .wrap_err_with(|| "error creating checksums file")?;
     let archives = all_archives.lock().await.clone();
     for arc in archives {
         let path = Utf8Path::new(&arc);
@@ -38,7 +38,7 @@ pub async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>
         // Write the name and checksum to the file
         file.write_all(format!("{}\t{}\n", path.file_name().unwrap(), checksum).as_bytes())
             .await
-            .wrap_err_with(|| format!("error writing checksums to file"))?;
+            .wrap_err_with(|| "error writing checksums to file")?;
 
         file.flush().await?;
     }

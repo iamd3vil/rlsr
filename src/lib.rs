@@ -65,13 +65,12 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         let template_meta = {
             let mut template_meta: HashMap<&str, String> = HashMap::new();
-            let tag: String;
-            if is_at_latest_tag().await? {
-                tag = get_latest_tag().await?;
+            let tag = if is_at_latest_tag().await? {
+                get_latest_tag().await?
             } else {
-                tag = get_latest_commit_hash().await?;
-            }
-            debug!("tag: {}", tag);
+                get_latest_commit_hash().await?
+            };
+            debug!("tag found: {}", tag);
             template_meta.insert("tag", tag);
 
             Arc::new(template_meta)
@@ -182,7 +181,7 @@ pub async fn run_build(
             .to_string();
 
         let archive_name_tpl = Template::new(&build.archive_name);
-        let archive_name = archive_name_tpl.render(&meta)?;
+        let archive_name = archive_name_tpl.render(meta)?;
         let no_archive = build.no_archive.map_or(false, |val| val);
         if !no_archive {
             // Create an archive.
@@ -191,12 +190,12 @@ pub async fn run_build(
             // Add all files that needs to be archived.
             let mut files = vec![bin_path.to_owned()];
             if let Some(additional_files) = &build.additional_files {
-                files.extend_from_slice(&additional_files);
+                files.extend_from_slice(additional_files);
             }
 
             // Add any additional files defined in the release.
             if let Some(rls_additional_files) = &release.additional_files {
-                files.extend_from_slice(&rls_additional_files);
+                files.extend_from_slice(rls_additional_files);
             }
 
             // Sort and only keep the uniq files.

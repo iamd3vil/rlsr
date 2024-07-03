@@ -1,8 +1,7 @@
-use color_eyre::eyre::{bail, Context, Result};
+use camino::Utf8Path;
+use color_eyre::eyre::{bail, Result};
 use config::FileFormat;
 use serde::{Deserialize, Serialize};
-// use tokio::fs;
-// use config::Config;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Github {
@@ -61,16 +60,29 @@ pub struct Config {
 }
 
 pub fn parse_config(cfg_path: &str) -> Result<Config> {
+    // Parse config according to the file format.
+    let file_ext = Utf8Path::new(&cfg_path);
+    let source = match file_ext.extension() {
+        Some("toml") => FileFormat::Toml,
+        Some("yaml") => FileFormat::Yaml,
+        _ => {
+            bail!("unsupported file format");
+        }
+    };
+
     let settings = config::Config::builder()
-        .add_source(config::File::new(cfg_path, FileFormat::Yaml))
+        .add_source(config::File::new(cfg_path, source))
         .build();
 
     match settings {
         Ok(c) => {
-            let cfg: Config = c
-                .try_deserialize()
-                .wrap_err_with(|| "error deserializing to config")?;
-            Ok(cfg)
+            let cfg: Result<_, _> = c.try_deserialize();
+            match cfg {
+                Ok(cfg) => Ok(cfg),
+                Err(err) => {
+                    bail!("error parsing config: {}", err);
+                }
+            }
         }
         Err(err) => {
             bail!("error reading config: {}", err);
