@@ -95,17 +95,42 @@ pub async fn get_changelog() -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.args(vec![
         "log",
-        "--format=%h: %B",
+        "--pretty=format:%h%n%s%n%ae%n--end-commit--",
         &format!("{}..{}", prev_tag, latest_tag),
     ]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(
             "error getting changelog: {}",
-            String::from_utf8_lossy(&output.stdout).to_string()
+            String::from_utf8_lossy(&output.stderr).to_string()
         );
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+
+    let log_output = match std::str::from_utf8(&output.stdout) {
+        Ok(output) => output,
+        Err(e) => bail!("error converting output to utf-8: {}", e),
+    };
+
+    let mut changelog = String::new();
+
+    for commit in log_output.split("--end-commit--") {
+        let mut lines = commit.lines().filter(|line| !line.trim().is_empty());
+        if let (Some(hash), Some(subject), Some(email)) = (lines.next(), lines.next(), lines.next())
+        {
+            println!("{}: {} ({})", hash, subject, email);
+            // Placeholder for additional email processing
+            let processed_email = process_email(email);
+            changelog.push_str(&format!("{}: {} ({})\n", hash, subject, processed_email));
+        }
+    }
+
+    Ok(changelog)
+}
+
+fn process_email(email: &str) -> String {
+    // Perform additional processing on the email here
+    // For example, you could append a domain or manipulate the email string in some way
+    format!("processed_{}", email)
 }
 
 pub async fn is_repo_clean() -> Result<bool> {

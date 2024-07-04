@@ -16,7 +16,7 @@ mod utils;
 use crate::release_provider::ReleaseProvider;
 use config::{Build, Config, Release};
 use std::collections::HashMap;
-use utils::{archive_files, ArchiveFile};
+use utils::{archive_files, get_changelog, ArchiveFile};
 
 #[derive(Debug, Clone)]
 pub struct Opts {
@@ -99,6 +99,9 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         // Wait until all builds are finished in a release.
         futures::future::join_all(&mut all_builds).await;
+
+        let changelog = get_changelog().await?;
+        println!("{}", changelog);
 
         let rls = &releases[i];
 
