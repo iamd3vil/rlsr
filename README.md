@@ -28,29 +28,36 @@ If `publish` flag isn't given, `rlsr` will skip publishing. `rm-dist` flag clean
 
 ```yaml
 releases:
-  - name: "Github release"
-    # Dist folder is where the builds will exist.
+  - name: "Release to github"
+    # The dist folder where the builds will be stored.
     dist_folder: "./dist"
+    # The targets where the builds will be released.
     targets:
-      # Github repo details.
       github:
         owner: "iamd3vil"
         repo: "rlsr"
-    # Builds to execute.
+      docker:
+        image: "localhost:5000/rlsr"
+        dockerfile: "./Dockerfile"
+        context: "."
+    # The checksum algorithm to use.
+    checksum:
+      algorithm: "sha256"
+    # These additional files will be included with all the builds.
+    additional_files:
+      - "README.md"
+      - "LICENSE"
     builds:
-      # Command is the command to create a release build.
       - command: "cargo build --release"
-        # Binary name.
-        bin_name: "rlsr"
-        # Path to the built binary after running the given command.
-        artifact: "./target/release/rlsr"
-        # Name of the archive that will be created with the built binary.
-        # The archive will be attached with the github release.
-        name: "rlsr-linux-x86_64"
-        # If no_archive is given, rlsr won't create a archive and only uploads the binary.
-        no_archive: false
+        bin_name: "rlsr" # Optional, defaults to the archive name.
+        artifact: "./target/release/rlsr" # The artifact to archive and release.
+        archive_name: "rlsr-linux-x86_64" # Archive name.
+        no_archive: false # If turned true, will not archive the artifact.
 
-        # Additional files to be added in archives.
+        # Build specific additional files.
         additional_files:
           - "README.md"
+          - "LICENSE"
+changelog:
+  format: "github"
 ```
