@@ -6,6 +6,8 @@ use std::cmp::Ord;
 use std::{fs, io};
 use tokio::{process::Command, task};
 
+use crate::config::Changelog;
+
 /// ArchiveFile has the filename on the disk and the filename in the archive.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub(crate) struct ArchiveFile {
@@ -87,7 +89,7 @@ pub async fn get_all_git_log() -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-pub async fn get_changelog() -> Result<String> {
+pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
     // Get previous tag.
     let prev_tag = get_previous_tag().await?;
     let latest_tag = get_latest_tag().await?;
@@ -95,17 +97,50 @@ pub async fn get_changelog() -> Result<String> {
     let mut cmd = Command::new("git");
     cmd.args(vec![
         "log",
-        "--format=%h: %B",
+        "--pretty=format:%h%n%s%n%ae%n--end-commit--",
         &format!("{}..{}", prev_tag, latest_tag),
     ]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(
             "error getting changelog: {}",
-            String::from_utf8_lossy(&output.stdout).to_string()
+            String::from_utf8_lossy(&output.stderr).to_string()
         );
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+
+    let log_output = match std::str::from_utf8(&output.stdout) {
+        Ok(output) => output,
+        Err(e) => bail!("error converting output to utf-8: {}", e),
+    };
+
+    let mut changelog = String::new();
+
+    for commit in log_output.split("--end-commit--") {
+        let mut lines = commit.lines().filter(|line| !line.trim().is_empty());
+        if let (Some(hash), Some(subject), Some(email)) = (lines.next(), lines.next(), lines.next())
+        {
+            if cfg.format == "github" {
+                let processed_email = get_github_handle(email).await?;
+                changelog.push_str(&format!("{}: {} (@{})\n", hash, subject, processed_email));
+            } else {
+                changelog.push_str(&format!("{}: {}\n", hash, subject));
+            }
+        }
+    }
+
+    Ok(changelog)
+}
+
+async fn get_github_handle(email: &str) -> Result<String> {
+    let gh_client = octocrab::instance();
+    let user = gh_client.search().users(email).send().await?;
+
+    // Check if there is a user.
+    if user.items.is_empty() {
+        return Ok(email.to_string());
+    }
+
+    Ok(user.items[0].login.clone())
 }
 
 pub async fn is_repo_clean() -> Result<bool> {
