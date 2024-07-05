@@ -14,7 +14,7 @@ mod release_provider;
 mod utils;
 
 use crate::release_provider::ReleaseProvider;
-use config::{Build, Config, Release};
+use config::{Build, Changelog, Config, Release};
 use std::collections::HashMap;
 use utils::{archive_files, get_changelog, ArchiveFile};
 
@@ -100,7 +100,8 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         // Wait until all builds are finished in a release.
         futures::future::join_all(&mut all_builds).await;
 
-        let changelog = get_changelog().await?;
+        let changelog_cfg = cfg.changelog.clone();
+        let changelog = get_changelog(&changelog_cfg.unwrap_or_default()).await?;
         println!("{}", changelog);
 
         let rls = &releases[i];
@@ -123,7 +124,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             debug!("latest tag: {}", latest_tag);
 
             // Make release providers from given config.
-            let providers = get_release_providers(&releases[i])?;
+            let providers = get_release_providers(&releases[i], cfg.changelog.clone())?;
             for prov in providers {
                 let all_archives = all_archives.clone();
                 match prov
@@ -141,13 +142,16 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     Ok(())
 }
 
-fn get_release_providers(release: &Release) -> Result<Vec<Box<dyn ReleaseProvider>>> {
+fn get_release_providers(
+    release: &Release,
+    changelog: Option<Changelog>,
+) -> Result<Vec<Box<dyn ReleaseProvider>>> {
     let mut providers: Vec<Box<dyn ReleaseProvider>> = vec![];
 
     // Check if github details are provided.
     if release.targets.github.is_some() {
         let ghtoken = get_github_token();
-        let gh = Github::new(ghtoken);
+        let gh = Github::new(ghtoken, changelog.unwrap_or_default());
         providers.push(Box::new(gh));
     }
 

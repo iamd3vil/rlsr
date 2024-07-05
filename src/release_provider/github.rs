@@ -1,4 +1,4 @@
-use crate::config::Release;
+use crate::config::{Changelog, Release};
 use crate::release_provider::ReleaseProvider;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use async_trait::async_trait;
@@ -22,21 +22,24 @@ impl ReleaseProvider for Github {
         all_archives: Arc<Mutex<Vec<String>>>,
         latest_tag: String,
     ) -> Result<()> {
-        Self::publish_build(release, all_archives, self.ghtoken.clone(), latest_tag).await?;
+        self.publish_build(release, all_archives, self.ghtoken.clone(), latest_tag)
+            .await?;
         Ok(())
     }
 }
 
 pub struct Github {
     ghtoken: String,
+    changelog: Changelog,
 }
 
 impl Github {
-    pub fn new(ghtoken: String) -> Self {
-        Github { ghtoken }
+    pub fn new(ghtoken: String, changelog: Changelog) -> Self {
+        Github { ghtoken, changelog }
     }
 
     async fn publish_build(
+        &self,
         release: &Release,
         all_archives: Arc<Mutex<Vec<String>>>,
         ghtoken: String,
@@ -64,7 +67,7 @@ impl Github {
         let changelog = if tags.len() == 1 {
             get_all_git_log().await?
         } else {
-            get_changelog().await?
+            get_changelog(&self.changelog).await?
         };
 
         let res = ghclient

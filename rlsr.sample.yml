@@ -22,10 +22,12 @@ releases:
       - command: "cargo build --release"
         bin_name: "rlsr" # Optional, defaults to the archive name.
         artifact: "./target/release/rlsr" # The artifact to archive and release.
-        name: "rlsr-linux-x86_64" # Archive name.
+        archive_name: "rlsr-linux-x86_64" # Archive name.
         no_archive: false # If turned true, will not archive the artifact.
 
         # Build specific additional files.
         additional_files:
           - "README.md"
           - "LICENSE"
+changelog:
+  format: "github"

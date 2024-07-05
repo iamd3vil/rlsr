@@ -40,6 +40,21 @@ pub struct Checksum {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Changelog {
+    // Default will be "github".
+    pub format: String,
+}
+
+// Implement default for ChangeLog.
+impl Default for Changelog {
+    fn default() -> Self {
+        Changelog {
+            format: "".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Build {
     pub command: String,
     pub artifact: String,
@@ -57,6 +72,7 @@ pub struct Build {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub releases: Vec<Release>,
+    pub changelog: Option<Changelog>,
 }
 
 pub fn parse_config(cfg_path: &str) -> Result<Config> {
