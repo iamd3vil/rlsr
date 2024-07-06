@@ -13,6 +13,9 @@ release:
 build-linux $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target x86_64-unknown-linux-gnu
 
+build-freebsd:
+    cross build --release --target x86_64-unknown-freebsd
+
 build-macos $RUSTFLAGS="-C target-feature=+crt-static":
     #!/usr/bin/env sh
     if [ "$(uname)" = "Darwin" ]; then
