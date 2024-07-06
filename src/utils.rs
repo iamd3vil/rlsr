@@ -3,7 +3,7 @@ use color_eyre::eyre::{bail, Context, Result};
 use camino::Utf8Path;
 use log::debug;
 use std::cmp::Ord;
-use std::{fs, io};
+use std::{env, fs, io};
 use tokio::{process::Command, task};
 
 use crate::config::Changelog;
@@ -131,9 +131,17 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
     Ok(changelog)
 }
 
+pub fn get_github_token() -> String {
+    // Check if `GITHUB_TOKEN` is present.
+    env::var("GITHUB_TOKEN").unwrap_or_else(|_| String::new())
+}
+
 async fn get_github_handle(email: &str) -> Result<String> {
-    let gh_client = octocrab::instance();
-    let user = gh_client.search().users(email).send().await?;
+    let ghclient = octocrab::OctocrabBuilder::default()
+        .personal_token(get_github_token().clone())
+        .build()?;
+
+    let user = ghclient.search().users(email).send().await?;
 
     // Check if there is a user.
     if user.items.is_empty() {

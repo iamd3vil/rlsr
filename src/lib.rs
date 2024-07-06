@@ -150,7 +150,7 @@ fn get_release_providers(
 
     // Check if github details are provided.
     if release.targets.github.is_some() {
-        let ghtoken = get_github_token();
+        let ghtoken = utils::get_github_token();
         let gh = Github::new(ghtoken, changelog.unwrap_or_default());
         providers.push(Box::new(gh));
     }
@@ -262,9 +262,4 @@ pub async fn run_build(
     }
 
     Ok(String::from(""))
-}
-
-fn get_github_token() -> String {
-    // Check if `GITHUB_TOKEN` is present.
-    env::var("GITHUB_TOKEN").unwrap_or_else(|_| String::new())
 }
