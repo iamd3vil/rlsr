@@ -3,7 +3,7 @@ use crate::release_provider::ReleaseProvider;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use async_trait::async_trait;
 use camino::Utf8Path;
-use color_eyre::eyre::{bail, Result};
+use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info};
 use reqwest::{Body, Client};
 use std::sync::Arc;
@@ -23,7 +23,13 @@ impl ReleaseProvider for Github {
         latest_tag: String,
     ) -> Result<()> {
         self.publish_build(release, all_archives, self.ghtoken.clone(), latest_tag)
-            .await?;
+            .await
+            .with_context(|| {
+                format!(
+                    "error publishing release to github for release: {}",
+                    release.name
+                )
+            })?;
         Ok(())
     }
 }
@@ -100,7 +106,8 @@ impl Github {
             ghtoken,
             checksum_path,
         )
-        .await?;
+        .await
+        .context("uploading archives")?;
 
         info!("release created");
         Ok(())
@@ -212,7 +219,8 @@ impl Github {
             .header("Content-Type", mime_type)
             .header("Accept", MEDIA_TYPE)
             .send()
-            .await?;
+            .await
+            .context("error uploading file")?;
         if res.status() != reqwest::StatusCode::CREATED {
             bail!(
                 "error uploading to github, status: {}, error: {}",
