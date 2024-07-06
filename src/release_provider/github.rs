@@ -82,7 +82,8 @@ impl Github {
             .create(&latest_tag)
             .body(&changelog)
             .send()
-            .await?;
+            .await
+            .context("error creating release in github")?;
 
         let release_id = res.id.0;
         let github = release.targets.github.clone();
@@ -193,7 +194,9 @@ impl Github {
         ghtoken: String,
     ) -> Result<()> {
         // Stat the file to get the size of the file.
-        let meta = fs::metadata(&filepath).await?;
+        let meta = fs::metadata(&filepath)
+            .await
+            .context("error getting file metadata")?;
         let size = meta.len();
 
         // Guess mime.
