@@ -25,6 +25,8 @@ releases:
         archive_name: "rlsr-linux-x86_64" # Archive name.
         no_archive: false # If turned true, will not archive the artifact.
 
+        prehook: "generate_docs.sh" # Optional, a script to run before the build.
+
         # Build specific additional files.
         additional_files:
           - "README.md"

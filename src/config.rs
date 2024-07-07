@@ -60,7 +60,10 @@ pub struct Build {
     pub artifact: String,
     pub bin_name: Option<String>,
     pub archive_name: String,
-    pub name: Option<String>,
+    pub name: String,
+
+    /// Prehook to run before the build.
+    pub prehook: Option<String>,
 
     // Doesn't create an archive if given true.
     pub no_archive: Option<bool>,

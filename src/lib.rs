@@ -83,9 +83,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             let template_meta = template_meta.clone();
             all_builds.push(tokio::spawn(async move {
                 let name = &releases[i].builds[b].name;
-                if let Some(name) = name {
-                    info!("executing build: {}", name);
-                }
+                info!("executing build: {}", name);
                 let res = run_build(&releases[i], &releases[i].builds[b], &template_meta).await;
                 match res {
                     Err(err) => {
@@ -168,10 +166,31 @@ pub async fn run_build(
     build: &Build,
     meta: &HashMap<&str, String>,
 ) -> Result<String> {
+    // Check if there is a prehook.
+    // If there is a prehook, execute it.
+    if let Some(prehook) = &build.prehook {
+        info!("executing prehook: `{}` for build: {}", prehook, build.name);
+        let prehook_cmds = prehook.split(' ').collect::<Vec<&str>>();
+        let mut command = Command::new(prehook_cmds[0]);
+
+        if prehook_cmds.len() > 1 {
+            command.args(&prehook_cmds[1..]);
+        }
+
+        let output = command.output().await?;
+        if !output.status.success() {
+            bail!("prehook failed: {}", prehook);
+        }
+    }
+
     debug!("executing command: {}", build.command);
     // Split cmd into command, args.
     let cmds = build.command.split(' ').collect::<Vec<&str>>();
-    let output = Command::new(cmds[0]).args(&cmds[1..]).output().await?;
+    let mut command = Command::new(cmds[0]);
+    if cmds.len() > 1 {
+        command.args(&cmds[1..]);
+    }
+    let output = command.output().await?;
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
