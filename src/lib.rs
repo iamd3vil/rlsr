@@ -7,6 +7,7 @@ use release_provider::{docker, github::Github};
 use std::sync::Arc;
 use tokio::{fs, process::Command, sync::Mutex};
 
+mod changelog_formatter;
 mod checksum;
 mod checksummer;
 pub mod config;

@@ -6,6 +6,7 @@ use std::cmp::Ord;
 use std::{env, fs, io};
 use tokio::{process::Command, task};
 
+use crate::changelog_formatter;
 use crate::config::Changelog;
 
 /// ArchiveFile has the filename on the disk and the filename in the archive.
@@ -113,42 +114,34 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         Err(e) => bail!("error converting output to utf-8: {}", e),
     };
 
-    let mut changelog = String::new();
+    let mut commits: Vec<changelog_formatter::Commit> = vec![];
 
     for commit in log_output.split("--end-commit--") {
         let mut lines = commit.lines().filter(|line| !line.trim().is_empty());
         if let (Some(hash), Some(subject), Some(email)) = (lines.next(), lines.next(), lines.next())
         {
-            if cfg.format == "github" {
-                let processed_email = get_github_handle(email).await?;
-                changelog.push_str(&format!("{}: {} (@{})\n", hash, subject, processed_email));
-            } else {
-                changelog.push_str(&format!("{}: {}\n", hash, subject));
-            }
+            let commit = changelog_formatter::Commit {
+                hash: hash.to_string(),
+                subject: subject.to_string(),
+                email: email.to_string(),
+            };
+            commits.push(commit);
         }
     }
 
-    Ok(changelog)
+    // Initialize changelog formatter.
+    let fmter = changelog_formatter::get_new_formatter(&cfg.format)
+        .wrap_err("error getting changelog formatter")?;
+
+    Ok(fmter
+        .format(&commits)
+        .await
+        .wrap_err("error formatting changelog")?)
 }
 
 pub fn get_github_token() -> String {
     // Check if `GITHUB_TOKEN` is present.
     env::var("GITHUB_TOKEN").unwrap_or_else(|_| String::new())
-}
-
-async fn get_github_handle(email: &str) -> Result<String> {
-    let ghclient = octocrab::OctocrabBuilder::default()
-        .personal_token(get_github_token().clone())
-        .build()?;
-
-    let user = ghclient.search().users(email).send().await?;
-
-    // Check if there is a user.
-    if user.items.is_empty() {
-        return Ok(email.to_string());
-    }
-
-    Ok(user.items[0].login.clone())
 }
 
 pub async fn is_repo_clean() -> Result<bool> {
