@@ -4,7 +4,7 @@ use color_eyre::eyre::{bail, Context, ContextCompat, Result};
 use log::{debug, error, info, warn};
 use new_string_template::template::Template;
 use release_provider::{docker, github::Github};
-use std::{env, sync::Arc};
+use std::sync::Arc;
 use tokio::{fs, process::Command, sync::Mutex};
 
 mod checksum;

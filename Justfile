@@ -13,6 +13,9 @@ release:
 build-linux $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target x86_64-unknown-linux-gnu
 
+build-linux-arm64 $RUSTFLAGS="-C target-feature=+crt-static":
+    cross build --release --target aarch64-unknown-linux-musl
+
 build-freebsd:
     cross build --release --target x86_64-unknown-freebsd
 
