@@ -133,10 +133,10 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
     let fmter = changelog_formatter::get_new_formatter(&cfg.format)
         .wrap_err("error getting changelog formatter")?;
 
-    Ok(fmter
+    fmter
         .format(&commits)
         .await
-        .wrap_err("error formatting changelog")?)
+        .wrap_err("error formatting changelog")
 }
 
 pub fn get_github_token() -> String {

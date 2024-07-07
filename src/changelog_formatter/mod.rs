@@ -15,7 +15,7 @@ pub struct Commit {
 #[async_trait]
 #[allow(clippy::needless_arbitrary_self_type)]
 pub trait Formatter: Send {
-    async fn format(&self, commits: &Vec<Commit>) -> Result<String>;
+    async fn format(&self, commits: &[Commit]) -> Result<String>;
 }
 
 pub fn get_new_formatter(format: &str) -> Result<Box<dyn Formatter + Send>> {

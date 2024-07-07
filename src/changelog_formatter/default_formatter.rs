@@ -6,7 +6,7 @@ pub struct DefaultFormatter();
 
 #[async_trait]
 impl Formatter for DefaultFormatter {
-    async fn format(&self, commits: &Vec<Commit>) -> Result<String> {
+    async fn format(&self, commits: &[Commit]) -> Result<String> {
         let mut formatted = String::new();
 
         for commit in commits {

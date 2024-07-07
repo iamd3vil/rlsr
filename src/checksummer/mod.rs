@@ -10,9 +10,8 @@ use self::sha256::Sha256;
 use self::sha512::Sha512;
 
 #[async_trait]
-#[allow(clippy::needless_arbitrary_self_type)]
 pub trait Checksummer: Send {
-    async fn compute(self: &Self, file_path: &str) -> Result<String>;
+    async fn compute(&self, file_path: &str) -> Result<String>;
 }
 
 pub fn get_new_checksummer(algorithm: &str) -> Result<Box<dyn Checksummer + Send>> {
