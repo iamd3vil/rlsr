@@ -65,6 +65,9 @@ pub struct Build {
     /// Prehook to run before the build.
     pub prehook: Option<String>,
 
+    /// Posthook to run after the build.
+    pub posthook: Option<String>,
+
     // Doesn't create an archive if given true.
     pub no_archive: Option<bool>,
 
