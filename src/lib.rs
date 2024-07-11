@@ -3,7 +3,6 @@ use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, ContextCompat, Result};
 use log::{debug, error, info, warn};
 use new_string_template::template::Template;
-use release_provider::{docker, github::Github};
 use std::sync::Arc;
 use tokio::{fs, process::Command, sync::Mutex};
 
@@ -14,8 +13,7 @@ pub mod config;
 mod release_provider;
 mod utils;
 
-use crate::release_provider::ReleaseProvider;
-use config::{Build, Changelog, Config, Release};
+use config::{Build, Config, Release};
 use std::collections::HashMap;
 use utils::{archive_files, get_changelog, ArchiveFile};
 
@@ -123,7 +121,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             debug!("latest tag: {}", latest_tag);
 
             // Make release providers from given config.
-            let providers = get_release_providers(&releases[i], cfg.changelog.clone())?;
+            let providers = utils::get_release_providers(&releases[i], cfg.changelog.clone())?;
             for prov in providers {
                 let all_archives = all_archives.clone();
                 match prov
@@ -139,26 +137,6 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn get_release_providers(
-    release: &Release,
-    changelog: Option<Changelog>,
-) -> Result<Vec<Box<dyn ReleaseProvider>>> {
-    let mut providers: Vec<Box<dyn ReleaseProvider>> = vec![];
-
-    // Check if github details are provided.
-    if release.targets.github.is_some() {
-        let ghtoken = utils::get_github_token();
-        let gh = Github::new(ghtoken, changelog.unwrap_or_default());
-        providers.push(Box::new(gh));
-    }
-
-    if release.targets.docker.is_some() {
-        providers.push(Box::new(docker::Docker::new()));
-    }
-
-    Ok(providers)
 }
 
 pub async fn run_build(

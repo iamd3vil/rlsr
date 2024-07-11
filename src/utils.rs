@@ -7,13 +7,35 @@ use std::{env, fs, io};
 use tokio::{process::Command, task};
 
 use crate::changelog_formatter;
-use crate::config::Changelog;
+use crate::config::{Changelog, Release};
+use crate::release_provider::github::Github;
+use crate::release_provider::{docker, ReleaseProvider};
 
 /// ArchiveFile has the filename on the disk and the filename in the archive.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub(crate) struct ArchiveFile {
     pub disk_path: String,
     pub archive_filename: String,
+}
+
+pub fn get_release_providers(
+    release: &Release,
+    changelog: Option<Changelog>,
+) -> Result<Vec<Box<dyn ReleaseProvider>>> {
+    let mut providers: Vec<Box<dyn ReleaseProvider>> = vec![];
+
+    // Check if github details are provided.
+    if release.targets.github.is_some() {
+        let ghtoken = get_github_token();
+        let gh = Github::new(ghtoken, changelog.unwrap_or_default());
+        providers.push(Box::new(gh));
+    }
+
+    if release.targets.docker.is_some() {
+        providers.push(Box::new(docker::Docker::new()));
+    }
+
+    Ok(providers)
 }
 
 // Gets the latest tag if it exists.
