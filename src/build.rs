@@ -22,6 +22,12 @@ pub async fn run_build(
     // Check if there is a prehook.
     // If there is a prehook, execute it.
     if let Some(prehook) = &build.prehook {
+        // Build a build specific build_meta.
+        // This is used to render the prehook template.
+        let mut build_meta = meta.clone();
+        build_meta.insert("build_name", build.name.clone());
+        let prehook = Template::new(prehook).render(&build_meta)?;
+
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
         let prehook_cmds = prehook.split(' ').collect::<Vec<&str>>();
         let mut command = Command::new(prehook_cmds[0]);
@@ -48,8 +54,7 @@ pub async fn run_build(
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
         let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
-        let bin_name_tmpl = Template::new(bin_name);
-        let bin_name = bin_name_tmpl.render(meta)?;
+        let bin_name = Template::new(bin_name).render(meta)?;
         fs::copy(
             &build.artifact,
             Utf8Path::new(&release.dist_folder).join(&bin_name),

@@ -1,6 +1,5 @@
-use color_eyre::eyre::{bail, Context, Result};
-// use async_zip::write::{EntryOptions, ZipFileWriter};
 use camino::Utf8Path;
+use color_eyre::eyre::{bail, Context, Result};
 use log::debug;
 use std::cmp::Ord;
 use std::{env, fs, io};
