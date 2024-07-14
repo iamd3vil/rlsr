@@ -7,11 +7,11 @@ use color_eyre::{
 };
 use log::{debug, info};
 use new_string_template::template::Template;
-use tokio::{fs, process::Command};
+use tokio::fs;
 
 use crate::{
     config::{Build, Release},
-    utils::{archive_files, ArchiveFile},
+    utils::{self, archive_files, ArchiveFile},
 };
 
 pub async fn run_build(
@@ -29,14 +29,8 @@ pub async fn run_build(
         let prehook = Template::new(prehook).render(&build_meta)?;
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
-        let prehook_cmds = prehook.split(' ').collect::<Vec<&str>>();
-        let mut command = Command::new(prehook_cmds[0]);
 
-        if prehook_cmds.len() > 1 {
-            command.args(&prehook_cmds[1..]);
-        }
-
-        let output = command.output().await?;
+        let output = utils::execute_command(&prehook).await?;
         if !output.status.success() {
             bail!("prehook failed: {}", prehook);
         }
@@ -44,15 +38,27 @@ pub async fn run_build(
 
     debug!("executing command: {}", build.command);
     // Split cmd into command, args.
-    let cmds = build.command.split(' ').collect::<Vec<&str>>();
-    let mut command = Command::new(cmds[0]);
-    if cmds.len() > 1 {
-        command.args(&cmds[1..]);
-    }
-    let output = command.output().await?;
+    let output = utils::execute_command(&build.command).await?;
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
+        // If the build executed succesfully, execute the posthook.
+        // If there is a posthook, execute it.
+        if let Some(posthook) = &build.posthook {
+            // Build a build specific build_meta.
+            // This is used to render the posthook template.
+
+            info!(
+                "executing posthook: `{}` for build: {}",
+                posthook, build.name
+            );
+
+            let output = utils::execute_command(&posthook).await?;
+            if !output.status.success() {
+                bail!("posthook failed: {}", posthook);
+            }
+        }
+
         let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
         let bin_name = Template::new(bin_name).render(meta)?;
         fs::copy(

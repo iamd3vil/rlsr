@@ -2,6 +2,7 @@ use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, Result};
 use log::debug;
 use std::cmp::Ord;
+use std::process::Output;
 use std::{env, fs, io};
 use tokio::{process::Command, task};
 
@@ -15,6 +16,17 @@ use crate::release_provider::{docker, ReleaseProvider};
 pub(crate) struct ArchiveFile {
     pub disk_path: String,
     pub archive_filename: String,
+}
+
+pub async fn execute_command(cmd: &str) -> Result<Output> {
+    let cmds = cmd.split(' ').collect::<Vec<&str>>();
+    let mut command = Command::new(cmds[0]);
+    if cmds.len() > 1 {
+        command.args(&cmds[1..]);
+    }
+
+    let output = command.output().await?;
+    Ok(output)
 }
 
 pub fn get_release_providers(
