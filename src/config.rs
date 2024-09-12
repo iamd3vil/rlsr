@@ -32,6 +32,14 @@ pub struct Release {
 
     // Additonal files to be included in the archive.
     pub additional_files: Option<Vec<String>>,
+
+    // Commands to run before starting the builds.
+    pub hooks: Option<Hooks>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Hooks {
+    pub before: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

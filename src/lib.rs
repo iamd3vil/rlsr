@@ -58,10 +58,6 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             }
         }
 
-        // Create dist directory.
-        trace!("creating dist folder: {}", &releases[i].dist_folder);
-        fs::create_dir_all(&releases[i].dist_folder).await?;
-
         let template_meta = {
             let mut template_meta: HashMap<&str, String> = HashMap::new();
             let tag = if is_at_latest_tag().await? {
@@ -74,6 +70,24 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
             Arc::new(template_meta)
         };
+
+        // Execute if there is a before hook.
+        if let Some(hooks) = &releases[i].hooks {
+            if let Some(before) = &hooks.before {
+                // Execute the commands in the before hook.
+                for command in before {
+                    info!("executing before hook: {}", command);
+                    let output = utils::execute_command(command).await?;
+                    if !output.status.success() {
+                        bail!("before hook failed: {}", command);
+                    }
+                }
+            }
+        }
+
+        // Create dist directory.
+        trace!("creating dist folder: {}", &releases[i].dist_folder);
+        fs::create_dir_all(&releases[i].dist_folder).await?;
 
         for b in 0..releases[i].builds.len() {
             let releases = shared.clone();

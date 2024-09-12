@@ -18,6 +18,10 @@ releases:
     additional_files:
       - "README.md"
       - "LICENSE"
+    # Global hooks for the release. Will be run before any build.
+    hooks:
+      before:
+        - "cargo check"
     builds:
       - command: "cargo build --release"
         bin_name: "rlsr" # Optional, defaults to the archive name.
