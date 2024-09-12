@@ -7,8 +7,7 @@ build:
     cargo build
 
 release:
-    cargo run --release
-
+    cargo run --release -- -c rlsr.yml --rm-dist -p
 
 build-linux $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target x86_64-unknown-linux-gnu
