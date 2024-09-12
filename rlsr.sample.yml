@@ -26,6 +26,7 @@ releases:
         no_archive: false # If turned true, will not archive the artifact.
 
         prehook: "generate_docs.sh" # Optional, a script to run before the build.
+        posthook: "posthook.sh"
 
         # Build specific additional files.
         additional_files:

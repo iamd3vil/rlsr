@@ -29,35 +29,38 @@ If `publish` flag isn't given, `rlsr` will skip publishing. `rm-dist` flag clean
 ```yaml
 releases:
   - name: "Release to github"
-    # The dist folder where the builds will be stored.
     dist_folder: "./dist"
-    # The targets where the builds will be released.
     targets:
       github:
         owner: "iamd3vil"
         repo: "rlsr"
-      docker:
-        image: "localhost:5000/rlsr"
-        dockerfile: "./Dockerfile"
-        context: "."
-    # The checksum algorithm to use.
     checksum:
       algorithm: "sha256"
-    # These additional files will be included with all the builds.
     additional_files:
       - "README.md"
+      - "rlsr.sample.yml"
       - "LICENSE"
     builds:
-      - command: "cargo build --release"
-        bin_name: "rlsr" # Optional, defaults to the archive name.
-        artifact: "./target/release/rlsr" # The artifact to archive and release.
-        archive_name: "rlsr-linux-x86_64" # Archive name.
-        no_archive: false # If turned true, will not archive the artifact.
-
-        # Build specific additional files.
-        additional_files:
-          - "README.md"
-          - "LICENSE"
+      - command: "just build-linux"
+        artifact: "target/x86_64-unknown-linux-gnu/release/rlsr"
+        archive_name: "rlsr-{tag}-linux-x86_64"
+        name: "Linux build"
+      - command: "just build-macos"
+        artifact: "target/aarch64-apple-darwin/release/rlsr"
+        archive_name: "rlsr-{tag}-macos-arm64"
+        name: "MacOS build"
+      - command: "just build-windows"
+        artifact: "target/x86_64-pc-windows-gnu/release/rlsr.exe"
+        archive_name: "rlsr-{tag}-windows-x86_64"
+        name: "Windows build"
+      - command: "just build-freebsd"
+        artifact: "target/x86_64-unknown-freebsd/release/rlsr"
+        archive_name: "rlsr-{tag}-freebsd-x86_64"
+        name: "FreeBSD build"
+      - command: "just build-linux-arm64"
+        artifact: "target/aarch64-unknown-linux-musl/release/rlsr"
+        archive_name: "rlsr-{tag}-linux-arm64"
+        name: "Linux ARM64 build"
 changelog:
   format: "github"
 ```
