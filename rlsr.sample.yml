@@ -18,6 +18,8 @@ releases:
     additional_files:
       - "README.md"
       - "LICENSE"
+    env:
+      - "RUSTFLAGS=-C target-cpu=native"
     # Global hooks for the release. Will be run before any build.
     hooks:
       before:
