@@ -23,6 +23,6 @@ OPTIONS:
 
 If `publish` flag isn't given, `rlsr` will skip publishing. `rm-dist` flag cleans the dist folder before building the release again.
 
-## Configuration
+## Configuration 🔧
 
-[Configuration](/guides/config/) can be found here.
+[Configuration](/config/) can be found here.
