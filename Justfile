@@ -34,3 +34,6 @@ build-macos $RUSTFLAGS="-C target-feature=+crt-static":
 
 build-windows:
     cross build --target x86_64-pc-windows-gnu --release
+
+docs-serve:
+    cd docs && npm run dev && cd ../

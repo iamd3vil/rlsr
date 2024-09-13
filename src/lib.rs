@@ -77,7 +77,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 // Execute the commands in the before hook.
                 for command in before {
                     info!("executing before hook: {}", command);
-                    let output = utils::execute_command(command).await?;
+                    let output = utils::execute_command(command, &releases[i].env).await?;
                     if !output.status.success() {
                         bail!("before hook failed: {}", command);
                     }

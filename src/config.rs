@@ -29,6 +29,7 @@ pub struct Release {
     pub builds: Vec<Build>,
     pub targets: ReleaseTargets,
     pub checksum: Option<Checksum>,
+    pub env: Option<Vec<String>>,
 
     // Additonal files to be included in the archive.
     pub additional_files: Option<Vec<String>>,

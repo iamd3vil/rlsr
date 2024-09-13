@@ -18,11 +18,18 @@ pub(crate) struct ArchiveFile {
     pub archive_filename: String,
 }
 
-pub async fn execute_command(cmd: &str) -> Result<Output> {
+pub async fn execute_command(cmd: &str, envs: &Option<Vec<String>>) -> Result<Output> {
     let cmds = cmd.split(' ').collect::<Vec<&str>>();
     let mut command = Command::new(cmds[0]);
     if cmds.len() > 1 {
         command.args(&cmds[1..]);
+    }
+
+    if let Some(envs) = envs {
+        for env in envs {
+            let envs = env.split('=').collect::<Vec<&str>>();
+            command.env(envs[0], envs[1]);
+        }
     }
 
     let output = command.output().await?;

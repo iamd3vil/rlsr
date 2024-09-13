@@ -30,15 +30,19 @@ pub async fn run_build(
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
-        let output = utils::execute_command(&prehook).await?;
+        let output = utils::execute_command(&prehook, &release.env).await?;
         if !output.status.success() {
             bail!("prehook failed: {}", prehook);
         }
     }
 
     debug!("executing command: {}", build.command);
+
+    // Insert environment variables into the command.
+    let cmd = Template::new(&build.command).render(meta)?;
+
     // Split cmd into command, args.
-    let output = utils::execute_command(&build.command).await?;
+    let output = utils::execute_command(&cmd, &release.env).await?;
 
     // If the build executed succesfully, copy the artifact to dist folder.
     if output.status.success() {
@@ -53,7 +57,7 @@ pub async fn run_build(
                 posthook, build.name
             );
 
-            let output = utils::execute_command(&posthook).await?;
+            let output = utils::execute_command(&posthook, &release.env).await?;
             if !output.status.success() {
                 bail!("posthook failed: {}", posthook);
             }
