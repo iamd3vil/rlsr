@@ -10,7 +10,13 @@ export default defineConfig({
         github: "https://github.com/iamd3vil/rlsr",
       },
       sidebar: [
-        "config",
+        {
+          label: "Configuration",
+          items: [
+            { label: "Configuration", slug: "config/config" },
+            { label: "Release Targets", slug: "config/targets" },
+          ],
+        },
         // {
         //   label: "Configuration",
         //   items

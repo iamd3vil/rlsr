@@ -3,8 +3,6 @@ title: Configuration 🔧
 description: How to configure Rlsr.
 ---
 
-# Configuration
-
 Rlsr is configured using a configuration file in the root of your project. This file defines the release process and versioning strategy for your project.
 
 ## Supported Formats
@@ -80,20 +78,9 @@ The `releases` section is an array that can contain one or more release configur
 
 ### Targets
 
-The `targets` subsection specifies where the releases will be published. Rlsr supports multiple target types:
+The `targets` subsection specifies where the releases will be published. Rlsr supports multiple target types, including GitHub and Docker.
 
-#### GitHub
-
-For releasing to GitHub, you need to specify:
-- `owner`: The GitHub username or organization name.
-- `repo`: The name of the GitHub repository.
-
-#### Docker
-
-For publishing Docker images, you need to provide:
-- `image`: The full name of the Docker image, including registry if applicable.
-- `dockerfile`: The path to the Dockerfile.
-- `context`: The build context for Docker.
+For detailed information on configuring targets, please refer to the [Release Targets Configuration](./targets) page.
 
 ### Checksum
 
@@ -108,8 +95,7 @@ You can specify a list of extra files to include with all builds:
 ### Environment Variables
 
 Define environment variables for the build process:
-- `env`: An array of key-value pairs for environment variables.
-
+- `env`: An array of environment variables in the format "KEY=value".
 ### Hooks
 
 Specify commands to run at certain points in the release process:
