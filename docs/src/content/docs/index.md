@@ -7,6 +7,10 @@ Rlsr is a tool to create & manage releases for your projects.
 
 Currently `rlsr` supports github releases and docker registry.
 
+## Installation 🚀
+
+Installation instructions can be found [here](/installation/).
+
 ## Usage
 
 ```
@@ -25,4 +29,4 @@ If `publish` flag isn't given, `rlsr` will skip publishing. `rm-dist` flag clean
 
 ## Configuration 🔧
 
-[Configuration](/config/) can be found here.
+[Configuration](/config/config/) can be found here.
