@@ -56,6 +56,8 @@ releases:
         name: "Linux ARM64 build"
 changelog:
   format: "github"
+  exclude:
+    - "^doc:"
 ```
 
 ## Configuration Structure
@@ -120,3 +122,4 @@ The `builds` section is an array that defines one or more build configurations. 
 The `changelog` section configures how the changelog is generated for your releases:
 
 - `format`: Specifies the format of the changelog (e.g., "github").
+- `exclude`: An array of regular expressions to exclude specific entries from the changelog.

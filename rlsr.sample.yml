@@ -40,3 +40,6 @@ releases:
           - "LICENSE"
 changelog:
   format: "github"
+  # exclude the commits which match the regexes.
+  exclude:
+    - "^doc:"

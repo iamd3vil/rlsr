@@ -34,3 +34,6 @@ releases:
         name: "Linux ARM64 build"
 changelog:
   format: "github"
+  exclude:
+    - "^doc:"
+    - "^chore:"

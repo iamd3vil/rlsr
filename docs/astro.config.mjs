@@ -18,22 +18,6 @@ export default defineConfig({
             { label: "Release Targets", slug: "config/targets" },
           ],
         },
-        // {
-        //   label: "Configuration",
-        //   items
-        // },
-        // {
-        //   label: "Guides",
-        //   items: [
-        //     // Each item here is one entry in the navigation menu.
-        //     // { label: "Example Guide", slug: "guides/example" },
-        //     { label: "Configuration", slug: "guides/config" },
-        //   ],
-        // },
-        // {
-        //   label: "Reference",
-        //   autogenerate: { directory: "reference" },
-        // },
       ],
     }),
   ],

@@ -52,6 +52,7 @@ pub struct Checksum {
 pub struct Changelog {
     // Default will be "github".
     pub format: String,
+    pub exclude: Option<Vec<String>>,
 }
 
 // Implement default for ChangeLog.
@@ -59,6 +60,7 @@ impl Default for Changelog {
     fn default() -> Self {
         Changelog {
             format: "".to_string(),
+            exclude: None,
         }
     }
 }

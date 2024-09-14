@@ -10,6 +10,7 @@ use crate::changelog_formatter;
 use crate::config::{Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::{docker, ReleaseProvider};
+use regex::Regex;
 
 /// ArchiveFile has the filename on the disk and the filename in the archive.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -154,20 +155,45 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         Err(e) => bail!("error converting output to utf-8: {}", e),
     };
 
-    let mut commits: Vec<changelog_formatter::Commit> = vec![];
+    let exclude_patterns: Vec<Regex> = cfg
+        .exclude
+        .as_ref()
+        .map(|patterns| {
+            patterns
+                .iter()
+                .filter_map(|pat| Regex::new(pat).ok())
+                .collect()
+        })
+        .unwrap_or_default();
 
-    for commit in log_output.split("--end-commit--") {
-        let mut lines = commit.lines().filter(|line| !line.trim().is_empty());
-        if let (Some(hash), Some(subject), Some(email)) = (lines.next(), lines.next(), lines.next())
-        {
-            let commit = changelog_formatter::Commit {
-                hash: hash.to_string(),
-                subject: subject.to_string(),
-                email: email.to_string(),
-            };
-            commits.push(commit);
-        }
-    }
+    let commits: Vec<changelog_formatter::Commit> = log_output
+        .split_terminator("--end-commit--")
+        .filter_map(|commit| {
+            let mut lines = commit.lines().filter_map(|line| {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    Some(trimmed)
+                } else {
+                    None
+                }
+            });
+
+            match (lines.next(), lines.next(), lines.next()) {
+                (Some(hash), Some(subject), Some(email)) => {
+                    if exclude_patterns.iter().any(|regex| regex.is_match(subject)) {
+                        None
+                    } else {
+                        Some(changelog_formatter::Commit {
+                            hash: hash.to_owned(),
+                            subject: subject.to_owned(),
+                            email: email.to_owned(),
+                        })
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect();
 
     // Initialize changelog formatter.
     let fmter = changelog_formatter::get_new_formatter(&cfg.format)
