@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-
+use crate::TemplateMeta;
 use camino::Utf8Path;
 use color_eyre::{
     eyre::{bail, Context, ContextCompat},
     Result,
 };
 use log::{debug, info};
-use new_string_template::template::Template;
+use serde::Serialize;
 use tokio::fs;
 
 use crate::{
@@ -14,19 +13,24 @@ use crate::{
     utils::{self, archive_files, ArchiveFile},
 };
 
-pub async fn run_build(
-    release: &Release,
-    build: &Build,
-    meta: &HashMap<&str, String>,
-) -> Result<String> {
+#[derive(Debug, Clone, Serialize)]
+pub struct BuildMeta {
+    pub build_name: String,
+    pub tag: String,
+}
+
+pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) -> Result<String> {
+    // Build a build specific build_meta.
+    // This is used to render the prehook template.
+    let build_meta = BuildMeta {
+        build_name: build.name.clone(),
+        tag: meta.tag.clone(),
+    };
+
     // Check if there is a prehook.
     // If there is a prehook, execute it.
     if let Some(prehook) = &build.prehook {
-        // Build a build specific build_meta.
-        // This is used to render the prehook template.
-        let mut build_meta = meta.clone();
-        build_meta.insert("build_name", build.name.clone());
-        let prehook = Template::new(prehook).render(&build_meta)?;
+        let prehook = utils::render_template(&prehook, &build_meta);
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
@@ -39,7 +43,7 @@ pub async fn run_build(
     debug!("executing command: {}", build.command);
 
     // Insert environment variables into the command.
-    let cmd = Template::new(&build.command).render(meta)?;
+    let cmd = utils::render_template(&build.command, &build_meta);
 
     // Split cmd into command, args.
     let output = utils::execute_command(&cmd, &release.env).await?;
@@ -64,7 +68,8 @@ pub async fn run_build(
         }
 
         let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
-        let bin_name = Template::new(bin_name).render(meta)?;
+        let bin_name = utils::render_template(bin_name, meta);
+        dbg!(&bin_name);
         fs::copy(
             &build.artifact,
             Utf8Path::new(&release.dist_folder).join(&bin_name),
@@ -76,8 +81,9 @@ pub async fn run_build(
             .join(&bin_name)
             .to_string();
 
-        let archive_name_tpl = Template::new(&build.archive_name);
-        let archive_name = archive_name_tpl.render(meta)?;
+        // let archive_name_tpl = Template::new(&build.archive_name);
+        // let archive_name = archive_name_tpl.render(meta)?;
+        let archive_name = utils::render_template(&build.archive_name, &build_meta);
         let no_archive = build.no_archive.map_or(false, |val| val);
         if !no_archive {
             // Create an archive.

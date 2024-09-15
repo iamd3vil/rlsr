@@ -10,7 +10,9 @@ use crate::changelog_formatter;
 use crate::config::{Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::{docker, ReleaseProvider};
+use minijinja::{context, Environment};
 use regex::Regex;
+use std::fmt::Debug;
 
 /// ArchiveFile has the filename on the disk and the filename in the archive.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -260,6 +262,14 @@ pub async fn get_latest_commit_hash() -> Result<String> {
 
     let commit_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(commit_id)
+}
+
+/// render_template renders a template with the given context using minijinja.
+pub fn render_template<S: serde::Serialize + Debug>(tmpl: &str, meta: S) -> String {
+    let mut env = Environment::new();
+    env.add_template("tmpl", tmpl).unwrap();
+    let tpl = env.get_template("tmpl").unwrap();
+    tpl.render(context!(meta => meta)).unwrap()
 }
 
 // Creates an zip archive with the file given.
