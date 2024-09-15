@@ -30,7 +30,7 @@ targets:
 
 ### Important Note
 
-To release to GitHub, you must set the `GH_TOKEN` environment variable with a valid GitHub Personal Access Token. This token is used to authenticate and perform release operations on your GitHub repository.
+To release to GitHub, you must set the `GITHUB_TOKEN` environment variable with a valid GitHub Personal Access Token. This token is used to authenticate and perform release operations on your GitHub repository.
 
 ## Docker
 
