@@ -134,15 +134,22 @@ pub async fn get_all_git_log() -> Result<String> {
 }
 
 pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
-    // Get previous tag.
-    let prev_tag = get_previous_tag().await?;
     let latest_tag = get_latest_tag().await?;
+
+    // Try to get the previous tag, use empty string if it fails
+    let prev_tag = get_previous_tag().await.unwrap_or_default();
+
+    let range = if prev_tag.is_empty() {
+        latest_tag.clone() // Use only the latest tag if there's no previous tag
+    } else {
+        format!("{}..{}", prev_tag, latest_tag)
+    };
 
     let mut cmd = Command::new("git");
     cmd.args(vec![
         "log",
         "--pretty=format:%h%n%s%n%ae%n--end-commit--",
-        &format!("{}..{}", prev_tag, latest_tag),
+        &range,
     ]);
     let output = cmd.output().await?;
     if !output.status.success() {

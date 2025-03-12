@@ -30,7 +30,7 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
     // Check if there is a prehook.
     // If there is a prehook, execute it.
     if let Some(prehook) = &build.prehook {
-        let prehook = utils::render_template(&prehook, &build_meta);
+        let prehook = utils::render_template(prehook, &build_meta);
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
@@ -61,7 +61,7 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
                 posthook, build.name
             );
 
-            let output = utils::execute_command(&posthook, &release.env).await?;
+            let output = utils::execute_command(posthook, &release.env).await?;
             if !output.status.success() {
                 bail!("posthook failed: {}", posthook);
             }
@@ -84,7 +84,7 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
         // let archive_name_tpl = Template::new(&build.archive_name);
         // let archive_name = archive_name_tpl.render(meta)?;
         let archive_name = utils::render_template(&build.archive_name, &build_meta);
-        let no_archive = build.no_archive.map_or(false, |val| val);
+        let no_archive = build.no_archive.is_some_and(|val| val);
         if !no_archive {
             // Create an archive.
             debug!("creating an archive for {}", &archive_name);

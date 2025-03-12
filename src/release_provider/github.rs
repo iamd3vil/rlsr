@@ -13,7 +13,6 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 
-#[allow(clippy::needless_arbitrary_self_type)]
 #[async_trait]
 impl ReleaseProvider for Github {
     async fn publish(
