@@ -33,3 +33,34 @@ impl Checksummer for Sha256 {
         Ok(format!("{:x}", hasher.finalize()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_compute_sha256() {
+        // Create a temporary file with known content
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let test_data = b"Hello, world!";
+        temp_file.write_all(test_data).unwrap();
+        let temp_path = temp_file.path().to_str().unwrap().to_string();
+
+        // Expected SHA-256 hash for "Hello, world!"
+        let expected = "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3";
+
+        // Create runtime and compute the hash
+        let rt = Runtime::new().unwrap();
+        let result = rt
+            .block_on(async {
+                let sha256 = Sha256 {};
+                sha256.compute(&temp_path).await
+            })
+            .unwrap();
+
+        assert_eq!(result, expected);
+    }
+}

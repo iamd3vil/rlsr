@@ -33,3 +33,34 @@ impl Checksummer for Sha512 {
         Ok(format!("{:x}", hasher.finalize()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_compute_sha512() {
+        // Create a temporary file with known content
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let test_data = b"Hello, world!";
+        temp_file.write_all(test_data).unwrap();
+        let temp_path = temp_file.path().to_str().unwrap().to_string();
+
+        // Expected SHA-512 hash for "Hello, world!"
+        let expected = "c1527cd893c124773d811911970c8fe6e857d6df5dc9226bd8a160614c0cd963a4ddea2b94bb7d36021ef9d865d5cea294a82dd49a0bb269f51f6e7a57f79421";
+
+        // Create runtime and compute the hash
+        let rt = Runtime::new().unwrap();
+        let result = rt
+            .block_on(async {
+                let sha512 = Sha512 {};
+                sha512.compute(&temp_path).await
+            })
+            .unwrap();
+
+        assert_eq!(result, expected);
+    }
+}
