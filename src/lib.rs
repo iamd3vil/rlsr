@@ -141,6 +141,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
             // Make release providers from given config.
             let providers = utils::get_release_providers(&releases[i], cfg.changelog.clone())?;
+            let mut publish_errors = Vec::new();
             for prov in providers {
                 let all_archives = all_archives.clone();
                 match prov
@@ -150,8 +151,16 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                     Ok(_) => continue,
                     Err(err) => {
                         error!("{}", err);
+                        publish_errors.push(err);
                     }
                 }
+            }
+
+            if !publish_errors.is_empty() {
+                bail!(
+                    "Failed to publish with {} provider(s)",
+                    publish_errors.len()
+                );
             }
         }
     }
