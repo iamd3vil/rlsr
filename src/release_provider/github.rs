@@ -8,7 +8,6 @@ use log::{debug, error, info};
 use reqwest::{Body, Client};
 use std::sync::Arc;
 use tokio::fs;
-use tokio::sync::Mutex;
 use tokio_util::codec::{BytesCodec, FramedRead};
 
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
@@ -18,7 +17,7 @@ impl ReleaseProvider for Github {
     async fn publish(
         self: &Self,
         release: &Release,
-        all_archives: Arc<Mutex<Vec<String>>>,
+        all_archives: Vec<String>,
         latest_tag: String,
     ) -> Result<()> {
         self.publish_build(release, all_archives, self.ghtoken.clone(), latest_tag)
@@ -46,7 +45,7 @@ impl Github {
     async fn publish_build(
         &self,
         release: &Release,
-        all_archives: Arc<Mutex<Vec<String>>>,
+        all_archives: Vec<String>,
         ghtoken: String,
         latest_tag: String,
     ) -> Result<()> {
@@ -99,7 +98,7 @@ impl Github {
         }
         // Upload all archives.
         Self::upload_archives(
-            all_archives.lock().await.to_vec(),
+            all_archives,
             release_id,
             owner,
             repo,

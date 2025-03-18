@@ -14,7 +14,6 @@ mod utils;
 
 use config::{Config, Release};
 use serde::Serialize;
-use utils::get_changelog;
 
 #[derive(Debug, Clone)]
 pub struct Opts {
@@ -105,28 +104,65 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 match res {
                     Err(err) => {
                         error!("error executing the build: {}", err);
+                        bail!("error executing the build: {}", err)
                     }
                     Ok(archive) => {
-                        all_archives.lock().await.push(archive);
+                        all_archives.lock().await.push(archive.clone());
+                        Ok(archive)
                     }
                 }
             }));
         }
 
         // Wait until all builds are finished in a release.
-        futures::future::join_all(&mut all_builds).await;
+        // Collect the results from all build futures.
+        let build_results = futures::future::join_all(&mut all_builds).await;
 
-        let changelog_cfg = cfg.changelog.clone();
-        let changelog = get_changelog(&changelog_cfg.unwrap_or_default()).await?;
-        println!("{}", changelog);
+        // Check if any build failed
+        let mut build_failures = Vec::new();
+        for (index, join_result) in build_results.iter().enumerate() {
+            if let Ok(Err(join_err)) = join_result {
+                error!("Build failed: {}", join_err);
+                build_failures.push(format!("Build #{} panicked: {}", index, join_err));
+            }
+        }
+
+        // If we had any build failures, you can decide how to proceed
+        if !build_failures.is_empty() {
+            warn!("Some builds failed: {:?}", build_failures);
+            bail!("Build process aborted due to failures");
+        }
+
+        // Execute after hooks
+        if let Some(hooks) = &releases[i].hooks {
+            if let Some(after) = &hooks.after {
+                // Execute the commands in the after hook.
+                for command in after {
+                    info!("executing after hook: {}", command);
+                    let output = utils::execute_command(command, &releases[i].env).await?;
+                    if !output.status.success() {
+                        bail!("after hook failed: {}", command);
+                    }
+                }
+            }
+        }
 
         let rls = &releases[i];
+
+        let all_archives = all_archives
+            .clone()
+            .lock()
+            .await
+            .iter()
+            .map(|archive| archive.to_owned())
+            .collect::<Vec<String>>();
 
         if rls.checksum.is_some() {
             checksum::create_checksums(rls, all_archives.clone()).await?;
         }
 
-        debug!("all builds are done: {:?}", all_archives);
+        info!("all builds are done");
+
         if publish {
             let latest_tag = match get_latest_tag().await {
                 Ok(tag) => {

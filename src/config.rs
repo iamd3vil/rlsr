@@ -41,6 +41,7 @@ pub struct Release {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Hooks {
     pub before: Option<Vec<String>>,
+    pub after: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -32,7 +32,6 @@ impl GithubFormatter {
 
     async fn get_github_handle(&self, email: &str) -> Result<String> {
         // Check if the handle is already cached.
-
         let cached_handles = self.cached_handles.lock().await;
         if let Some(handle) = cached_handles.get(email) {
             return Ok(handle.clone());

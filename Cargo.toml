@@ -12,7 +12,13 @@ serde_yaml = "0.9"
 yaml-rust = "0.4.5"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3.28"
-hyper-rustls = {version = "0.27", default-features = false, features = ["webpki-tokio", "http2", "http1", "logging", "ring"]}
+hyper-rustls = { version = "0.27", default-features = false, features = [
+    "webpki-tokio",
+    "http2",
+    "http1",
+    "logging",
+    "ring",
+] }
 octocrab = { version = "0.38.0", features = ["rustls-webpki-tokio"] }
 env_logger = "0.9.0"
 log = "0.4.16"

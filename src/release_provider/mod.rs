@@ -1,8 +1,6 @@
 use crate::config::Release;
 use async_trait::async_trait;
 use color_eyre::eyre::Result;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub mod docker;
 pub mod github;
@@ -16,7 +14,7 @@ pub trait ReleaseProvider {
     async fn publish(
         self: &Self,
         cfg: &Release,
-        all_archives: Arc<Mutex<Vec<String>>>,
+        all_archives: Vec<String>,
         latest_tag: String,
     ) -> Result<()>;
 }

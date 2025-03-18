@@ -22,16 +22,22 @@ pub(crate) struct ArchiveFile {
 }
 
 pub async fn execute_command(cmd: &str, envs: &Option<Vec<String>>) -> Result<Output> {
-    let cmds = cmd.split(' ').collect::<Vec<&str>>();
-    let mut command = Command::new(cmds[0]);
-    if cmds.len() > 1 {
-        command.args(&cmds[1..]);
-    }
+    let mut command = if cfg!(target_os = "windows") {
+        let mut cmd_process = Command::new("cmd");
+        cmd_process.args(["/C", cmd]);
+        cmd_process
+    } else {
+        let mut cmd_process = Command::new("sh");
+        cmd_process.args(["-c", cmd]);
+        cmd_process
+    };
 
     if let Some(envs) = envs {
         for env in envs {
-            let envs = env.split('=').collect::<Vec<&str>>();
-            command.env(envs[0], envs[1]);
+            let parts: Vec<&str> = env.split('=').collect();
+            if parts.len() >= 2 {
+                command.env(parts[0], parts[1..].join("="));
+            }
         }
     }
 

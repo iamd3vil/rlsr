@@ -10,7 +10,15 @@ release:
     cargo run --release -- -c rlsr.yml --rm-dist -p
 
 build-linux $RUSTFLAGS="-C target-feature=+crt-static":
-    cross build --release --target x86_64-unknown-linux-gnu
+    #!/usr/bin/env sh
+    if [ "$(uname)" = "Darwin" ]; then
+        cross build --release --target x86_64-unknown-linux-musl
+    elif [ "$(uname)" = "Linux" ]; then
+        cargo build --release --target x86_64-unknown-linux-musl
+    else
+        echo "Unsupported platform for build-linux"
+        exit 1
+    fi
 
 build-linux-arm64 $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target aarch64-unknown-linux-musl

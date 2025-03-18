@@ -103,6 +103,7 @@ Define environment variables for the build process:
 Specify commands to run at certain points in the release process:
 - `hooks`:
   - `before`: An array of commands to run before any build starts.
+  - `after`: An array of commands to run after all builds complete.
 
 ### Builds
 

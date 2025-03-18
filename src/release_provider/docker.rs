@@ -3,8 +3,7 @@ use crate::release_provider::ReleaseProvider;
 use async_trait::async_trait;
 use color_eyre::eyre::{bail, Context, Result};
 use log::info;
-use std::sync::Arc;
-use tokio::{process::Command, sync::Mutex};
+use tokio::process::Command;
 
 pub struct Docker {}
 
@@ -72,13 +71,12 @@ impl Docker {
     }
 }
 
-#[allow(clippy::needless_arbitrary_self_type)]
 #[async_trait]
 impl ReleaseProvider for Docker {
     async fn publish(
-        self: &Self,
+        &self,
         release: &Release,
-        _all_archives: Arc<Mutex<Vec<String>>>,
+        _all_archives: Vec<String>,
         latest_tag: String,
     ) -> Result<()> {
         if release.targets.docker.is_none() {

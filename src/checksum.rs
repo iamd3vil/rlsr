@@ -3,10 +3,9 @@ use crate::Release;
 use camino::Utf8Path;
 use color_eyre::eyre::{Context, Result};
 use log::debug;
-use std::sync::Arc;
-use tokio::{fs, io::AsyncWriteExt, sync::Mutex};
+use tokio::{fs, io::AsyncWriteExt};
 
-pub async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>>>) -> Result<()> {
+pub async fn create_checksums(rls: &Release, archives: Vec<String>) -> Result<()> {
     let cm_path = Utf8Path::new(&rls.dist_folder).join("checksums.txt");
     if fs::metadata(&cm_path).await.is_ok() {
         // Remove checksums file if it exists.
@@ -22,7 +21,6 @@ pub async fn create_checksums(rls: &Release, all_archives: Arc<Mutex<Vec<String>
         .open(&cm_path)
         .await
         .wrap_err_with(|| "error creating checksums file")?;
-    let archives = all_archives.lock().await.clone();
     for arc in archives {
         let path = Utf8Path::new(&arc);
 
