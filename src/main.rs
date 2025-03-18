@@ -15,7 +15,7 @@ struct Args {
     rm_dist: bool,
 
     #[clap(short, long)]
-    publish: bool,
+    skip_publish: bool,
 }
 
 #[tokio::main]
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     };
 
     let opts = Opts {
-        publish: args.publish,
+        skip_publish: args.skip_publish,
         rm_dist: args.rm_dist,
     };
 

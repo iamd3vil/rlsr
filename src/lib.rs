@@ -17,7 +17,7 @@ use serde::Serialize;
 
 #[derive(Debug, Clone)]
 pub struct Opts {
-    pub publish: bool,
+    pub skip_publish: bool,
     pub rm_dist: bool,
 }
 
@@ -27,10 +27,10 @@ pub struct TemplateMeta {
 }
 
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
-    let mut publish = opts.publish;
-    if !opts.publish {
-        warn!("--publish isn't given, so skipping publishing");
-        publish = false
+    let mut publish = opts.skip_publish;
+    if opts.skip_publish {
+        warn!("--skip-publish is given, so skipping publishing");
+        publish = false;
     }
 
     let is_clean = is_repo_clean().await?;
