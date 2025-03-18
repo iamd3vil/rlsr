@@ -117,6 +117,42 @@ The `builds` section is an array that defines one or more build configurations. 
 - `posthook`: (Optional) A script to run after this specific build.
 - `additional_files`: Build-specific additional files to include.
 
+## Templating
+
+Rlsr supports templating in various configuration fields, allowing you to dynamically generate values based on release metadata. The templating system uses the Handlebars syntax with double curly braces `{{ variable }}`.
+
+### The `meta` Object
+
+The `meta` object provides access to release metadata and can be used in several configuration fields:
+
+- `meta.tag`: The Git tag for the current release (e.g., `v1.2.3`)
+- `meta.version`: The version number without the 'v' prefix (e.g., `1.2.3`)
+
+### Supported Fields for Templating
+
+Templating can be used in the following configuration fields:
+
+- `archive_name`: Define dynamic archive names based on version or tag
+- `artifact`: Specify dynamic artifact paths
+- `prehook`: Generate dynamic pre-build scripts
+- `posthook`: Generate dynamic post-build scripts
+
+### Example Usage
+
+```yaml
+builds:
+  - command: "cargo build --release --target x86_64-unknown-linux-gnu"
+    artifact: "target/x86_64-unknown-linux-gnu/release/myapp"
+    archive_name: "myapp-{{ meta.tag }}-linux-x86_64"
+    prehook: "echo 'Building version {{ meta.version }} for Linux'"
+    posthook: "cp LICENSE dist/{{ meta.tag }}/linux/"
+```
+
+In this example:
+- The archive will be named with the Git tag (e.g., `myapp-v1.2.3-linux-x86_64`)
+- The prehook displays the version being built (e.g., `Building version 1.2.3 for Linux`)
+- The posthook copies the LICENSE file to a directory named after the tag
+
 ## Changelog Section
 
 The `changelog` section configures how the changelog is generated for your releases:
