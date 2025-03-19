@@ -27,7 +27,7 @@ pub struct TemplateMeta {
 }
 
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
-    let mut publish = opts.skip_publish;
+    let mut publish = true;
     if opts.skip_publish {
         warn!("--skip-publish is given, so skipping publishing");
         publish = false;
