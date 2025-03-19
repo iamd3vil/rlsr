@@ -23,7 +23,7 @@ build-linux $RUSTFLAGS="-C target-feature=+crt-static":
 build-linux-arm64 $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target aarch64-unknown-linux-musl
 
-build-freebsd:
+build-freebsd $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target x86_64-unknown-freebsd
 
 build-macos $RUSTFLAGS="-C target-feature=+crt-static":
@@ -36,11 +36,11 @@ build-macos $RUSTFLAGS="-C target-feature=+crt-static":
         docker run --rm \
         --volume ${PWD}:/root/src \
         --workdir /root/src \
-        joseluisq/rust-linux-darwin-builder:1.79.0 \
+        joseluisq/rust-linux-darwin-builder:1.84 \
         sh -c 'CC=aarch64-apple-darwin22.4-clang CXX=aarch64-apple-darwin22.4-clang++ TARGET_CC=aarch64-apple-darwin22.4-clang TARGET_AR=aarch64-apple-darwin22.4-ar cargo build --release --target aarch64-apple-darwin'
     fi
 
-build-windows:
+build-windows $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --target x86_64-pc-windows-gnu --release
 
 docs-serve:

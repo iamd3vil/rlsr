@@ -300,7 +300,7 @@ pub async fn archive_files(
         for file in filenames {
             let mut f = fs::File::open(&file.disk_path)?;
 
-            let options = zip::write::FileOptions::default()
+            let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .unix_permissions(0o744);
             zip.start_file(file.archive_filename, options)?;

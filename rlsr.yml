@@ -24,14 +24,6 @@ releases:
         artifact: "target/x86_64-pc-windows-gnu/release/rlsr.exe"
         archive_name: "rlsr-{{ meta.tag }}-windows-x86_64"
         name: "Windows build"
-      - command: "just build-freebsd"
-        artifact: "target/x86_64-unknown-freebsd/release/rlsr"
-        archive_name: "rlsr-{{ meta.tag }}-freebsd-x86_64"
-        name: "FreeBSD build"
-      - command: "just build-linux-arm64"
-        artifact: "target/aarch64-unknown-linux-musl/release/rlsr"
-        archive_name: "rlsr-{{ meta.tag }}-linux-arm64"
-        name: "Linux ARM64 build"
 changelog:
   format: "github"
   exclude:
