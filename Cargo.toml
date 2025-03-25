@@ -42,7 +42,7 @@ sha2 = "0.10.7"
 config = { version = "0.13.3", features = ["yaml", "yaml-rust", "toml"] }
 new_string_template = "1.4.0"
 regex = "1.10.6"
-minijinja = "2.2.0"
+minijinja = {version = "2.2.0", features = ["loader", "builtins"] }
 
 [dev-dependencies]
 tempfile = { version = "3.19" }

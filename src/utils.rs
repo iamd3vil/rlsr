@@ -202,6 +202,7 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
                             hash: hash.to_owned(),
                             subject: subject.to_owned(),
                             email: email.to_owned(),
+                            handle: None,
                         })
                     }
                 }
@@ -211,7 +212,8 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         .collect();
 
     // Initialize changelog formatter.
-    let fmter = changelog_formatter::get_new_formatter(&cfg.format)
+    let fmter = changelog_formatter::get_new_formatter(&cfg.format, cfg.template.clone())
+        .await
         .wrap_err("error getting changelog formatter")?;
 
     fmter

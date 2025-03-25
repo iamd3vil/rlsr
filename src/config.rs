@@ -54,6 +54,7 @@ pub struct Changelog {
     // Default will be "github".
     pub format: String,
     pub exclude: Option<Vec<String>>,
+    pub template: Option<String>,
 }
 
 // Implement default for ChangeLog.
@@ -62,6 +63,7 @@ impl Default for Changelog {
         Changelog {
             format: "".to_string(),
             exclude: None,
+            template: None,
         }
     }
 }

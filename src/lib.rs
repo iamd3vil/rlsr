@@ -163,6 +163,14 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         info!("all builds are done");
 
+        // Get changelog and debug print it.
+        // let changelog_fmter =
+        //     changelog_formatter::get_new_formatter(&ch_fmt.format, ch_fmt.template).await?;
+        // let changelog = changelog_fmter.format()
+        let ch_fmt = cfg.changelog.clone().unwrap_or_default();
+        let changelog = utils::get_changelog(&ch_fmt).await?;
+        debug!("changelog: {}", changelog);
+
         if publish {
             let latest_tag = match get_latest_tag().await {
                 Ok(tag) => {
