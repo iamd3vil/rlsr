@@ -87,20 +87,25 @@ For detailed information on configuring targets, please refer to the [Release Ta
 ### Checksum
 
 The `checksum` section allows you to specify the algorithm used for generating checksums of your artifacts:
+
 - `algorithm`: The checksum algorithm (e.g., "sha256").
 
 ### Additional Files
 
 You can specify a list of extra files to include with all builds:
+
 - `additional_files`: An array of file paths relative to your project root.
 
 ### Environment Variables
 
 Define environment variables for the build process:
+
 - `env`: An array of environment variables in the format "KEY=value".
+
 ### Hooks
 
 Specify commands to run at certain points in the release process:
+
 - `hooks`:
   - `before`: An array of commands to run before any build starts.
   - `after`: An array of commands to run after all builds complete.
@@ -150,6 +155,7 @@ builds:
 ```
 
 In this example:
+
 - The archive will be named with the Git tag (e.g., `myapp-v1.2.3-linux-x86_64`)
 - The prehook displays the version being built (e.g., `Building version 1.2.3 for Linux`)
 - The posthook copies the LICENSE file to a directory named after the tag
@@ -160,3 +166,30 @@ The `changelog` section configures how the changelog is generated for your relea
 
 - `format`: Specifies the format of the changelog (e.g., "github").
 - `exclude`: An array of regular expressions to exclude specific entries from the changelog.
+- `template`: The template file to use for generating the changelog.
+
+### Templating changelog
+
+Rlsr also supports templating in the changelog section. The following variables are available:
+
+- `meta.tag`: The Git tag for the current release (e.g., `v1.2.3`)
+- `commits`: An array of commits since the last release
+
+### Example Template
+
+```jinja
+## Features:
+{% for commit in commits if commit.subject|starts_with("feat:") or commit.subject|starts_with("refactor:") %}
+{{ commit.hash }}: {{ commit.subject|trim("feat: ")|trim("refactor: ") }}
+{%- endfor %}
+
+## Fixes:
+{% for commit in commits if commit.subject|starts_with("fix:") %}
+{{ commit.hash }}: {{ commit.subject|trim("fix: ") }}
+{%- endfor %}
+```
+
+#### Filters
+
+- `starts_with`: Checks if a string starts with a specified prefix.
+- `trim`: Removes a specified prefix from a string.

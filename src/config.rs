@@ -3,6 +3,21 @@ use color_eyre::eyre::{bail, Result};
 use config::FileFormat;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum HookType {
+    #[serde(rename = "before")]
+    Before,
+    #[serde(rename = "after")]
+    After,
+}
+
+// Implement Display for nice printing in logs
+impl std::fmt::Display for HookType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Github {
     pub owner: String,
@@ -51,8 +66,7 @@ pub struct Checksum {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Changelog {
-    // Default will be "github".
-    pub format: String,
+    pub format: Option<String>,
     pub exclude: Option<Vec<String>>,
     pub template: Option<String>,
 }
@@ -61,7 +75,7 @@ pub struct Changelog {
 impl Default for Changelog {
     fn default() -> Self {
         Changelog {
-            format: "".to_string(),
+            format: None,
             exclude: None,
             template: None,
         }

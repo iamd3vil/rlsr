@@ -1,4 +1,6 @@
-use super::{Commit, Formatter};
+use crate::TemplateMeta;
+
+use super::{get_minijinja_env, Commit, Formatter};
 use async_trait::async_trait;
 use color_eyre::{eyre::Context, Result};
 use minijinja::{context, Environment};
@@ -16,16 +18,15 @@ impl DefaultFormatter {
             Some(path) => fs::read_to_string(path).await?,
             None => DEFAULT_TEMPLATE.to_string(),
         };
-        let mut env = Environment::new();
-        env.add_template_owned("tmpl", content)
-            .wrap_err("error adding template")?;
+        // Use the static version that takes ownership of content
+        let env = get_minijinja_env(content)?;
         Ok(Self { tmpl: env })
     }
 }
 
 #[async_trait]
 impl Formatter for DefaultFormatter {
-    async fn format(&self, commits: &[Commit]) -> Result<String> {
+    async fn format(&self, commits: &[Commit], meta: &TemplateMeta) -> Result<String> {
         let mut formatted = String::new();
 
         // Render the minijinja template.
@@ -33,7 +34,8 @@ impl Formatter for DefaultFormatter {
 
         // Create a context with the commits data for the template
         let ctx = context!(
-            commits => commits
+            commits => commits,
+            meta => meta,
         );
 
         // Render the template with the context

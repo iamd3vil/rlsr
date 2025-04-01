@@ -1,5 +1,5 @@
 use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
-use color_eyre::eyre::{bail, Result};
+use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, trace, warn};
 use std::sync::Arc;
 use tokio::{fs, sync::Mutex};
@@ -26,187 +26,428 @@ pub struct TemplateMeta {
     pub tag: String,
 }
 
-pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
-    let mut publish = true;
-    if opts.skip_publish {
-        warn!("--skip-publish is given, so skipping publishing");
-        publish = false;
-    }
+// --- Helper Functions ---
 
-    let is_clean = is_repo_clean().await?;
-    let at_latest_tag = is_at_latest_tag().await?;
+/// Checks repository status (cleanliness, tag) and updates the publish flag.
+async fn check_repo_status(publish: &mut bool) -> Result<()> {
+    let is_clean = is_repo_clean()
+        .await
+        .context("Failed to check repo cleanliness")?;
+    let at_latest_tag = is_at_latest_tag()
+        .await
+        .context("Failed to check if at latest tag")?;
 
     debug!("is_clean: {}, at_latest_tag: {}", is_clean, at_latest_tag);
 
-    // Check if the repo is in a clean state and tagged.
-    if !(is_clean && at_latest_tag) {
-        warn!("repo is not clean and the latest commit is not tagged, skipping publishing");
-        publish = false
+    if !is_clean || !at_latest_tag {
+        warn!("Repo is not clean or the latest commit is not tagged, skipping publishing.");
+        *publish = false;
+    }
+    Ok(())
+}
+
+/// Handles the --rm-dist option and creates the distribution directory.
+async fn prepare_dist_directory(release: &Release, rm_dist: bool) -> Result<()> {
+    // Delete the dist directory if rm_dist is provided.
+    if rm_dist {
+        trace!("Deleting dist folder for release: {}", &release.dist_folder);
+        if let Ok(meta) = fs::metadata(&release.dist_folder).await {
+            if meta.is_dir() {
+                fs::remove_dir_all(&release.dist_folder)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to remove dist dir: {}", release.dist_folder)
+                    })?;
+            } else {
+                bail!(
+                    "Error deleting dist dir '{}': Not a directory",
+                    release.dist_folder
+                );
+            }
+        }
+        // If metadata check fails, it likely doesn't exist, which is fine.
     }
 
-    let num = cfg.releases.len();
-    let shared: Arc<Vec<Release>> = Arc::from(cfg.releases);
-    for i in 0..num {
-        let releases = shared.clone();
-        let mut all_builds = vec![];
-        let all_archives = Arc::new(Mutex::new(vec![]));
-        // Delete the dist directory if rm_dist is provided.
-        if opts.rm_dist {
-            trace!("deleting dist folder for release: {}", &releases[i].name);
-            if let Ok(meta) = fs::metadata(&releases[i].dist_folder).await {
-                if meta.is_dir() {
-                    fs::remove_dir_all(&releases[i].dist_folder).await?;
-                } else {
-                    bail!("error deleting dist dir: not a directory");
-                }
-            }
-        }
+    // Create dist directory.
+    trace!("Creating dist folder: {}", &release.dist_folder);
+    fs::create_dir_all(&release.dist_folder)
+        .await
+        .with_context(|| format!("Failed to create dist dir: {}", release.dist_folder))?;
 
-        let template_meta = {
-            let tag = if is_at_latest_tag().await? {
-                get_latest_tag().await?
-            } else {
-                get_latest_commit_hash().await?
-            };
-            debug!("tag found: {}", tag);
-            let template_meta = TemplateMeta { tag };
+    Ok(())
+}
 
-            Arc::new(template_meta)
-        };
+/// Determines the appropriate tag or commit hash for templating.
+async fn get_template_metadata() -> Result<Arc<TemplateMeta>> {
+    let tag = if is_at_latest_tag().await? {
+        get_latest_tag().await?
+    } else {
+        get_latest_commit_hash().await?
+    };
+    debug!("Tag/hash for templating: {}", tag);
+    Ok(Arc::new(TemplateMeta { tag }))
+}
 
-        // Execute if there is a before hook.
-        if let Some(hooks) = &releases[i].hooks {
-            if let Some(before) = &hooks.before {
-                // Execute the commands in the before hook.
-                for command in before {
-                    info!("executing before hook: {}", command);
-                    let output = utils::execute_command(command, &releases[i].env).await?;
-                    if !output.status.success() {
-                        bail!("before hook failed: {}", command);
-                    }
-                }
-            }
-        }
-
-        // Create dist directory.
-        trace!("creating dist folder: {}", &releases[i].dist_folder);
-        fs::create_dir_all(&releases[i].dist_folder).await?;
-
-        for b in 0..releases[i].builds.len() {
-            let releases = shared.clone();
-            let all_archives = all_archives.clone();
-            let template_meta = template_meta.clone();
-            all_builds.push(tokio::spawn(async move {
-                let name = &releases[i].builds[b].name;
-                info!("executing build: {}", name);
-                let res =
-                    build::run_build(&releases[i], &releases[i].builds[b], &template_meta).await;
-                match res {
-                    Err(err) => {
-                        error!("error executing the build: {}", err);
-                        bail!("error executing the build: {}", err)
-                    }
-                    Ok(archive) => {
-                        all_archives.lock().await.push(archive.clone());
-                        Ok(archive)
-                    }
-                }
-            }));
-        }
-
-        // Wait until all builds are finished in a release.
-        // Collect the results from all build futures.
-        let build_results = futures::future::join_all(&mut all_builds).await;
-
-        // Check if any build failed
-        let mut build_failures = Vec::new();
-        for (index, join_result) in build_results.iter().enumerate() {
-            if let Ok(Err(join_err)) = join_result {
-                error!("Build failed: {}", join_err);
-                build_failures.push(format!("Build #{} panicked: {}", index, join_err));
-            }
-        }
-
-        // If we had any build failures, you can decide how to proceed
-        if !build_failures.is_empty() {
-            warn!("Some builds failed: {:?}", build_failures);
-            bail!("Build process aborted due to failures");
-        }
-
-        // Execute after hooks
-        if let Some(hooks) = &releases[i].hooks {
-            if let Some(after) = &hooks.after {
-                // Execute the commands in the after hook.
-                for command in after {
-                    info!("executing after hook: {}", command);
-                    let output = utils::execute_command(command, &releases[i].env).await?;
-                    if !output.status.success() {
-                        bail!("after hook failed: {}", command);
-                    }
-                }
-            }
-        }
-
-        let rls = &releases[i];
-
-        let all_archives = all_archives
-            .clone()
-            .lock()
-            .await
-            .iter()
-            .map(|archive| archive.to_owned())
-            .collect::<Vec<String>>();
-
-        if rls.checksum.is_some() {
-            checksum::create_checksums(rls, all_archives.clone()).await?;
-        }
-
-        info!("all builds are done");
-
-        // Get changelog and debug print it.
-        // let changelog_fmter =
-        //     changelog_formatter::get_new_formatter(&ch_fmt.format, ch_fmt.template).await?;
-        // let changelog = changelog_fmter.format()
-        let ch_fmt = cfg.changelog.clone().unwrap_or_default();
-        let changelog = utils::get_changelog(&ch_fmt).await?;
-        debug!("changelog: {}", changelog);
-
-        if publish {
-            let latest_tag = match get_latest_tag().await {
-                Ok(tag) => {
-                    info!("found out latest tag: {}", tag);
-                    tag
-                }
-                Err(_) => {
-                    bail!("error finding tag, skipping publishing");
-                }
-            };
-            debug!("latest tag: {}", latest_tag);
-
-            // Make release providers from given config.
-            let providers = utils::get_release_providers(&releases[i], cfg.changelog.clone())?;
-            let mut publish_errors = Vec::new();
-            for prov in providers {
-                let all_archives = all_archives.clone();
-                match prov
-                    .publish(&releases[i], all_archives, latest_tag.clone())
-                    .await
-                {
-                    Ok(_) => continue,
-                    Err(err) => {
-                        error!("{}", err);
-                        publish_errors.push(err);
-                    }
-                }
-            }
-
-            if !publish_errors.is_empty() {
+/// Executes a list of hook commands.
+async fn execute_hooks(
+    hooks: &Option<Vec<String>>,
+    env: &Option<Vec<String>>,
+    hook_type: HookType,
+) -> Result<()> {
+    if let Some(commands) = hooks {
+        info!("Executing {} hooks...", hook_type);
+        for command in commands {
+            info!("Executing hook: {}", command);
+            let output = utils::execute_command(command, env)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to execute {} hook command: '{}'",
+                        hook_type, command
+                    )
+                })?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                error!(
+                    "{} hook command '{}' failed with status {:?}. Stderr:
+{}",
+                    hook_type,
+                    command,
+                    output.status.code(),
+                    stderr
+                );
                 bail!(
-                    "Failed to publish with {} provider(s)",
-                    publish_errors.len()
+                    "{} hook failed: '{}'. Status: {:?}. Stderr: {}",
+                    hook_type,
+                    command,
+                    output.status.code(),
+                    stderr
                 );
             }
         }
     }
     Ok(())
+}
+
+/// Runs all builds for a given release configuration in parallel.
+async fn run_builds_for_release(
+    release: &Release,
+    all_archives: Arc<Mutex<Vec<String>>>,
+    template_meta: Arc<TemplateMeta>,
+) -> Result<()> {
+    let mut build_handles = vec![];
+
+    info!("Starting builds for release: '{}'", release.name);
+    for build_config in &release.builds {
+        let release_clone = release.clone(); // Clone necessary data for the task
+        let build_config_clone = build_config.clone();
+        let all_archives_clone = all_archives.clone();
+        let template_meta_clone = template_meta.clone();
+
+        build_handles.push(tokio::spawn(async move {
+            let build_name = &build_config_clone.name;
+            info!("Executing build: {}", build_name);
+            let result =
+                build::run_build(&release_clone, &build_config_clone, &template_meta_clone).await;
+
+            match result {
+                Ok(archive_path) => {
+                    debug!(
+                        "Build '{}' successful, archive: {}",
+                        build_name, archive_path
+                    );
+                    all_archives_clone.lock().await.push(archive_path.clone());
+                    Ok(archive_path) // Return success value
+                }
+                Err(e) => {
+                    error!("Build '{}' failed: {:?}", build_name, e); // Use debug format for error
+                                                                      // We return the error wrapped in Ok, so join_all doesn't panic immediately
+                    Err(e.wrap_err(format!("Build '{}' execution failed", build_name)))
+                }
+            }
+        }));
+    }
+
+    // Wait for all builds to complete and collect results
+    let build_results = futures::future::join_all(build_handles).await;
+
+    let mut build_failures = Vec::new();
+    let mut successful_builds = 0;
+
+    // Process results, separating successes and failures
+    for (index, join_result) in build_results.into_iter().enumerate() {
+        match join_result {
+            Ok(task_result) => {
+                // Task completed without panic
+                match task_result {
+                    Ok(_) => successful_builds += 1, // Build function returned Ok
+                    Err(build_err) => {
+                        // Build function returned Err
+                        error!("Build #{} failed: {:?}", index, build_err); // Use debug format
+                                                                            // Use wrap_err for existing eyre::Error
+                        build_failures.push(build_err.wrap_err(format!("Build #{} failed", index)));
+                    }
+                }
+            }
+            Err(join_err) => {
+                // Task panicked
+                error!("Build task #{} panicked: {}", index, join_err);
+                build_failures.push(color_eyre::eyre::eyre!(
+                    "Build task #{} panicked: {}",
+                    index,
+                    join_err
+                ));
+            }
+        }
+    }
+
+    if !build_failures.is_empty() {
+        let failure_details = build_failures
+            .iter()
+            .map(|e| format!("  - {:?}", e)) // Use debug format
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+        warn!(
+            "{} out of {} builds failed for release '{}'. Failures:
+{}",
+            build_failures.len(),
+            release.builds.len(),
+            release.name,
+            failure_details
+        );
+        // Aggregate errors into a single error message
+        bail!(
+            "Build process aborted due to {} failures in release '{}'. See logs for details.",
+            build_failures.len(),
+            release.name
+        );
+    }
+
+    info!(
+        "All {} builds for release '{}' completed successfully.",
+        successful_builds, release.name
+    );
+    Ok(())
+}
+
+/// Creates checksums if configured for the release.
+async fn create_checksums_if_needed(release: &Release, all_archives: Vec<String>) -> Result<()> {
+    if release.checksum.is_some() {
+        info!("Creating checksums for release '{}'...", release.name);
+        checksum::create_checksums(release, all_archives)
+            .await
+            .context("Failed to create checksums")?;
+        info!("Checksum creation complete for release '{}'.", release.name);
+    } else {
+        debug!("Checksum creation skipped for release '{}'.", release.name);
+    }
+    Ok(())
+}
+
+/// Publishes release artifacts using configured providers.
+async fn publish_release_artifacts(
+    release: &Release,
+    changelog_config: Option<config::Changelog>,
+    all_archives: Vec<String>,
+) -> Result<()> {
+    let latest_tag = match get_latest_tag().await {
+        Ok(tag) => {
+            info!("Publishing for tag: {}", tag);
+            tag
+        }
+        Err(e) => {
+            bail!("Cannot publish without a valid tag: {}", e);
+        }
+    };
+
+    debug!("Latest tag for publishing: {}", latest_tag);
+
+    let providers = utils::get_release_providers(release, changelog_config)
+        .context("Failed to initialize release providers")?;
+
+    if providers.is_empty() {
+        info!(
+            "No release providers configured for release '{}'. Skipping publish step.",
+            release.name
+        );
+        return Ok(());
+    }
+
+    let mut publish_errors = Vec::new();
+    info!(
+        "Publishing artifacts for release '{}' using {} providers...",
+        release.name,
+        providers.len()
+    );
+
+    for provider in providers {
+        // Use type_name_of_val for a more descriptive placeholder
+        let provider_description = std::any::type_name_of_val(&*provider);
+        info!("Publishing via {}", provider_description);
+        let archives_clone = all_archives.clone(); // Clone archives for each provider call
+        match provider
+            .publish(release, archives_clone, latest_tag.clone())
+            .await
+        {
+            Ok(_) => info!("Successfully published via {}", provider_description),
+            Err(err) => {
+                error!("Failed to publish via {}: {:?}", provider_description, err);
+                // Use wrap_err for existing eyre::Error
+                publish_errors
+                    .push(err.wrap_err(format!("Provider '{}' failed", provider_description)));
+            }
+        }
+    }
+
+    if !publish_errors.is_empty() {
+        let error_details = publish_errors
+            .iter()
+            .map(|e| format!("  - {:?}", e)) // Use debug format
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+        bail!(
+            "{} publish errors occurred for release '{}':
+{}",
+            publish_errors.len(),
+            release.name,
+            error_details
+        );
+    }
+
+    info!(
+        "Successfully published artifacts for release '{}'.",
+        release.name
+    );
+    Ok(())
+}
+
+pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
+    let mut publish = !opts.skip_publish;
+    if opts.skip_publish {
+        warn!("--skip-publish is set, publishing will be skipped for all releases.");
+    }
+
+    // Initial repo status check affects default publish decision
+    check_repo_status(&mut publish)
+        .await
+        .context("Initial repository status check failed")?;
+
+    let releases = Arc::new(cfg.releases); // Use Arc for safe sharing across potential async boundaries if needed later
+
+    for release_config in releases.iter() {
+        info!("Processing release: '{}'", release_config.name);
+
+        // Determine template metadata once per release run
+        let template_meta = get_template_metadata()
+            .await
+            .context("Failed to get template metadata")?;
+
+        // Prepare distribution directory
+        prepare_dist_directory(release_config, opts.rm_dist)
+            .await
+            .with_context(|| format!("Failed preparation for release '{}'", release_config.name))?;
+
+        // Execute before hooks
+        if let Some(hooks) = &release_config.hooks {
+            execute_hooks(&hooks.before, &release_config.env, HookType::Before)
+                .await
+                .with_context(|| {
+                    format!("Before hooks failed for release '{}'", release_config.name)
+                })?;
+        }
+
+        // Run builds
+        let all_archives = Arc::new(Mutex::new(Vec::new()));
+        run_builds_for_release(release_config, all_archives.clone(), template_meta)
+            .await
+            .with_context(|| {
+                format!("Build process failed for release '{}'", release_config.name)
+            })?;
+
+        // Execute after hooks
+        if let Some(hooks) = &release_config.hooks {
+            execute_hooks(&hooks.after, &release_config.env, HookType::After)
+                .await
+                .with_context(|| {
+                    format!("After hooks failed for release '{}'", release_config.name)
+                })?;
+        }
+
+        // Collect archive paths
+        let collected_archives = {
+            let lock = all_archives.lock().await;
+            lock.clone() // Clone the Vec<String> out of the mutex guard
+        }; // Mutex guard is dropped here
+
+        if collected_archives.is_empty() {
+            warn!(
+                "No archives were produced for release '{}'. Skipping checksums and publishing.",
+                release_config.name
+            );
+            continue; // Move to the next release
+        }
+
+        // Create checksums
+        create_checksums_if_needed(release_config, collected_archives.clone())
+            .await
+            .with_context(|| {
+                format!(
+                    "Checksum creation failed for release '{}'",
+                    release_config.name
+                )
+            })?;
+
+        // (Optional) Handle changelog logic here if re-enabled
+        // let changelog = utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await?;
+        // debug!("Changelog for release '{}': {}", release_config.name, changelog);
+
+        // Publish artifacts if enabled for this run
+        if publish {
+            publish_release_artifacts(release_config, cfg.changelog.clone(), collected_archives)
+                .await
+                .with_context(|| {
+                    format!("Publishing failed for release '{}'", release_config.name)
+                })?;
+        } else {
+            info!(
+                "Publishing skipped for release '{}' due to previous checks or --skip-publish flag.",
+                release_config.name
+            );
+        }
+
+        info!("Successfully processed release: '{}'", release_config.name);
+    } // End loop over releases
+
+    info!("All releases processed.");
+    Ok(())
+}
+
+// Placeholder: Define HookType here. Ideally, move this to src/config.rs and make it public.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookType {
+    Before,
+    After,
+}
+
+impl From<&str> for HookType {
+    fn from(value: &str) -> Self {
+        match value {
+            "after" => HookType::After,
+            "before" => HookType::Before,
+            _ => panic!("Invalid hook type: {}", value),
+        }
+    }
+}
+
+// Implement Display for nice printing in logs
+impl std::fmt::Display for HookType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

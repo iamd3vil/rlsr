@@ -26,6 +26,7 @@ releases:
         name: "Windows build"
 changelog:
   format: "github"
+  template: "changelog.tpl"
   exclude:
     - "^doc:"
     - "^chore:"

@@ -24,6 +24,8 @@ releases:
     hooks:
       before:
         - "cargo check"
+      after:
+        - "echo 'Release complete'"
     builds:
       - command: "cargo build --release"
         bin_name: "rlsr" # Optional, defaults to the archive name.
@@ -40,6 +42,7 @@ releases:
           - "LICENSE"
 changelog:
   format: "github"
+  template: "changelog.tpl"
   # exclude the commits which match the regexes.
   exclude:
     - "^doc:"

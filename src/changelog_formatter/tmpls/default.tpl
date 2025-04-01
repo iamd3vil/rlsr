@@ -1,3 +1,3 @@
-{% for commit in commits %}
+{%- for commit in commits %}
 {{ commit.hash }}: {{ commit.subject }}
-{% endfor %}
+{%- endfor %}

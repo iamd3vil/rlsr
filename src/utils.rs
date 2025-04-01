@@ -6,10 +6,10 @@ use std::process::Output;
 use std::{env, fs, io};
 use tokio::{process::Command, task};
 
-use crate::changelog_formatter;
 use crate::config::{Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::{docker, ReleaseProvider};
+use crate::{changelog_formatter, TemplateMeta};
 use minijinja::{context, Environment};
 use regex::Regex;
 use std::fmt::Debug;
@@ -211,13 +211,15 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         })
         .collect();
 
+    let ch_fmt = cfg.format.clone().unwrap_or("".to_string());
+
     // Initialize changelog formatter.
-    let fmter = changelog_formatter::get_new_formatter(&cfg.format, cfg.template.clone())
+    let fmter = changelog_formatter::get_new_formatter(&ch_fmt, cfg.template.clone())
         .await
         .wrap_err("error getting changelog formatter")?;
 
     fmter
-        .format(&commits)
+        .format(&commits, &TemplateMeta { tag: latest_tag })
         .await
         .wrap_err("error formatting changelog")
 }

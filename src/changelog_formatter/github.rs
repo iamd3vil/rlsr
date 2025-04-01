@@ -6,7 +6,9 @@ use minijinja::{context, Environment};
 use octocrab::Octocrab;
 use tokio::{fs, sync::Mutex};
 
-use super::{Commit, Formatter};
+use crate::TemplateMeta;
+
+use super::{get_minijinja_env, Commit, Formatter};
 
 const DEFAULT_GH_TEMPLATE: &'static str = include_str!("tmpls/default_github_template.tpl");
 
@@ -34,9 +36,8 @@ impl GithubFormatter {
             None => DEFAULT_GH_TEMPLATE.to_string(),
         };
 
-        let mut env = Environment::new();
-        env.add_template_owned("tmpl", content)
-            .wrap_err("error adding template")?;
+        // Use get_minijinja_env for consistency
+        let env = get_minijinja_env(content)?;
 
         Ok(Self {
             ghclient,
@@ -70,7 +71,7 @@ impl GithubFormatter {
 
 #[async_trait]
 impl Formatter for GithubFormatter {
-    async fn format(&self, commits: &[Commit]) -> Result<String> {
+    async fn format(&self, commits: &[Commit], meta: &TemplateMeta) -> Result<String> {
         let mut formatted = String::new();
         let mut commits = commits.to_vec();
 
@@ -84,7 +85,8 @@ impl Formatter for GithubFormatter {
 
         // Create a context with the commits data for the template
         let ctx = context!(
-            commits => commits
+            commits => commits,
+            meta => meta,
         );
 
         // Render the template with the context
