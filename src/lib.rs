@@ -403,9 +403,11 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 )
             })?;
 
-        // (Optional) Handle changelog logic here if re-enabled
-        // let changelog = utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await?;
-        // debug!("Changelog for release '{}': {}", release_config.name, changelog);
+        let changelog = utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await?;
+        debug!(
+            "Changelog for release '{}': \n{}",
+            release_config.name, changelog
+        );
 
         // Publish artifacts if enabled for this run
         if publish {
