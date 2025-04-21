@@ -47,13 +47,30 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
     }
 }
 
+fn collect_envs(release: &Release, build: &Build) -> Option<Vec<String>> {
+    let envs: Vec<String> = release
+        .env
+        .iter()
+        .chain(build.env.iter())
+        .flatten()
+        .cloned()
+        .collect();
+    if envs.is_empty() {
+        None
+    } else {
+        Some(envs)
+    }
+}
+
 async fn execute_prehook(release: &Release, build: &Build, build_meta: &BuildMeta) -> Result<()> {
     if let Some(prehook) = &build.prehook {
         let prehook = utils::render_template(prehook, build_meta);
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
-        let output = utils::execute_command(&prehook, &release.env).await?;
+        let envs = collect_envs(release, build);
+
+        let output = utils::execute_command(&prehook, &envs).await?;
         if !output.status.success() {
             bail!("prehook failed: {}", prehook);
         }
@@ -68,8 +85,12 @@ async fn execute_build_command(
 ) -> Result<std::process::Output> {
     debug!("executing command: {}", build.command);
 
+    let envs = collect_envs(release, build);
+
+    debug!("envs: {:?}", envs);
+
     let cmd = utils::render_template(&build.command, build_meta);
-    utils::execute_command(&cmd, &release.env).await
+    utils::execute_command(&cmd, &envs).await
 }
 
 async fn execute_posthook(release: &Release, build: &Build) -> Result<()> {
@@ -79,7 +100,9 @@ async fn execute_posthook(release: &Release, build: &Build) -> Result<()> {
             posthook, build.name
         );
 
-        let output = utils::execute_command(posthook, &release.env).await?;
+        let envs = collect_envs(release, build);
+
+        let output = utils::execute_command(posthook, &envs).await?;
         if !output.status.success() {
             bail!("posthook failed: {}", posthook);
         }

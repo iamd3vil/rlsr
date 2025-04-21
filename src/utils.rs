@@ -36,6 +36,7 @@ pub async fn execute_command(cmd: &str, envs: &Option<Vec<String>>) -> Result<Ou
         for env in envs {
             let parts: Vec<&str> = env.split('=').collect();
             if parts.len() >= 2 {
+                debug!("setting env var: {}={}", parts[0], parts[1]);
                 command.env(parts[0], parts[1..].join("="));
             }
         }

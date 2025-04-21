@@ -90,6 +90,9 @@ pub struct Build {
     pub archive_name: String,
     pub name: String,
 
+    /// Environment variables to set for the build.
+    pub env: Option<Vec<String>>,
+
     /// Prehook to run before the build.
     pub prehook: Option<String>,
 
