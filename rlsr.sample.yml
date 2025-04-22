@@ -36,12 +36,18 @@ releases:
         prehook: "generate_docs.sh" # Optional, a script to run before the build.
         posthook: "posthook.sh"
 
+        env:
+          - "BUILD_ENV=production"
+
         # Build specific additional files.
         additional_files:
           - "README.md"
           - "LICENSE"
+
+# The changelog will be generated from the git log.
 changelog:
   format: "github"
+  # An optional template can be used to format the changelog.
   template: "changelog.tpl"
   # exclude the commits which match the regexes.
   exclude:

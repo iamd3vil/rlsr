@@ -38,6 +38,8 @@ releases:
         artifact: "target/x86_64-unknown-linux-gnu/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-linux-x86_64"
         name: "Linux build"
+        env:
+          - "BIN_NAME=rlsr.bin"
       - command: "just build-macos"
         artifact: "target/aarch64-apple-darwin/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-macos-arm64"
@@ -122,6 +124,7 @@ The `builds` section is an array that defines one or more build configurations. 
 - `prehook`: (Optional) A script to run before this specific build.
 - `posthook`: (Optional) A script to run after this specific build.
 - `additional_files`: Build-specific additional files to include.
+- `env`: Environment variables specific to this build. These will be merged with the global environment variables defined in the `releases` section.
 
 ## Templating
 

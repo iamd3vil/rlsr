@@ -20,12 +20,12 @@ USAGE:
 OPTIONS:
     -c, --config <CONFIG>    [default: rlsr.yml]
     -h, --help               Print help information
-    -p, --publish
         --rm-dist
+    -s, --skip-publish
     -V, --version            Print version information
 ```
 
-If `publish` flag isn't given, `rlsr` will skip publishing. `rm-dist` flag cleans the dist folder before building the release again.
+If `--skip-publish` flag is given, `rlsr` will skip publishing. `rm-dist` flag cleans the dist folder before building the release again.
 
 ## Configuration 🔧
 
