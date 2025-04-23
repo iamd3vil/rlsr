@@ -69,7 +69,7 @@ pub fn get_release_providers(
 // Gets the latest tag if it exists.
 pub async fn get_latest_tag() -> Result<String> {
     let mut cmd = Command::new("git");
-    cmd.args(vec!["describe", "--abbrev=0"]);
+    cmd.args(vec!["describe", "--abbrev=0", "--tags"]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!("error getting latest tag");
