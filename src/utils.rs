@@ -1,4 +1,5 @@
 use camino::Utf8Path;
+use chrono::{DateTime, TimeZone, Utc};
 use color_eyre::eyre::{bail, Context, Result};
 use log::debug;
 use std::cmp::Ord;
@@ -390,12 +391,27 @@ fn parse_go_module_name(contents: &str) -> Option<String> {
 }
 
 /// render_template renders a template with the given context using minijinja.
-pub fn render_template<S: serde::Serialize + Debug>(tmpl: &str, meta: S) -> String {
+pub trait TemplateContext: serde::Serialize + Debug {
+    fn env(&self) -> &std::collections::HashMap<String, String>;
+    fn date(&self) -> &str;
+    fn timestamp(&self) -> &str;
+    fn now(&self) -> &str;
+}
+
+/// render_template renders a template with the given context using minijinja.
+pub fn render_template<T: TemplateContext>(tmpl: &str, meta: &T) -> String {
     let mut env = Environment::new();
     add_string_filters(&mut env);
     env.add_template("tmpl", tmpl).unwrap();
     let tpl = env.get_template("tmpl").unwrap();
-    tpl.render(context!(meta => meta)).unwrap()
+    let ctx = context!(
+        meta => meta,
+        env => meta.env(),
+        date => meta.date(),
+        timestamp => meta.timestamp(),
+        now => meta.now(),
+    );
+    tpl.render(ctx).unwrap()
 }
 
 pub fn add_string_filters(env: &mut Environment) {
@@ -406,6 +422,7 @@ pub fn add_string_filters(env: &mut Environment) {
     env.add_filter("trimsuffix", trimsuffix_filter);
     env.add_filter("title", title_filter);
     env.add_filter("split", split_filter);
+    env.add_filter("time", time_filter);
 }
 
 fn tolower_filter(value: String) -> String {
@@ -448,6 +465,20 @@ fn split_filter(value: String, sep: String) -> Vec<String> {
         return vec![value];
     }
     value.split(&sep).map(str::to_string).collect()
+}
+
+fn time_filter(value: String, fmt: String) -> String {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(&value) {
+        return dt.with_timezone(&Utc).format(&fmt).to_string();
+    }
+
+    if let Ok(ts) = value.parse::<i64>() {
+        if let chrono::LocalResult::Single(dt) = Utc.timestamp_opt(ts, 0) {
+            return dt.format(&fmt).to_string();
+        }
+    }
+
+    value
 }
 
 // Creates an zip archive with the file given.
@@ -599,5 +630,68 @@ version = "0.1.0"
             split_filter("keep".to_string(), "".to_string()),
             vec!["keep"]
         );
+    }
+
+    #[test]
+    fn test_time_filter_formats_rfc3339_and_timestamp() {
+        assert_eq!(
+            time_filter("2025-01-25T10:30:00Z".to_string(), "%Y-%m-%d".to_string()),
+            "2025-01-25"
+        );
+        assert_eq!(
+            time_filter("0".to_string(), "%Y-%m-%d".to_string()),
+            "1970-01-01"
+        );
+        assert_eq!(
+            time_filter("not-a-time".to_string(), "%Y".to_string()),
+            "not-a-time"
+        );
+    }
+
+    #[derive(Debug, serde::Serialize)]
+    struct TestTemplateContext {
+        tag: String,
+        env: std::collections::HashMap<String, String>,
+        date: String,
+        timestamp: String,
+        now: String,
+    }
+
+    impl TemplateContext for TestTemplateContext {
+        fn env(&self) -> &std::collections::HashMap<String, String> {
+            &self.env
+        }
+
+        fn date(&self) -> &str {
+            &self.date
+        }
+
+        fn timestamp(&self) -> &str {
+            &self.timestamp
+        }
+
+        fn now(&self) -> &str {
+            &self.now
+        }
+    }
+
+    #[test]
+    fn test_render_template_exposes_meta_env_and_time() {
+        let mut env = std::collections::HashMap::new();
+        env.insert("RLSR_TEST".to_string(), "ok".to_string());
+        let ctx = TestTemplateContext {
+            tag: "v1.2.3".to_string(),
+            env,
+            date: "2025-01-25".to_string(),
+            timestamp: "0".to_string(),
+            now: "2025-01-25T10:30:00Z".to_string(),
+        };
+
+        let rendered = render_template(
+            "{{ env.RLSR_TEST }} {{ date }} {{ now|time(\"%Y-%m-%d\") }} {{ meta.tag }}",
+            &ctx,
+        );
+
+        assert_eq!(rendered, "ok 2025-01-25 2025-01-25 v1.2.3");
     }
 }

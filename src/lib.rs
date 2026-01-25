@@ -1,7 +1,9 @@
 use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
+use chrono::{SecondsFormat, Utc};
 use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, trace, warn};
 use semver::Version;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::{fs, sync::Mutex};
 
@@ -35,6 +37,28 @@ pub struct TemplateMeta {
     pub branch: String,
     pub previous_tag: String,
     pub project_name: String,
+    pub env: HashMap<String, String>,
+    pub date: String,
+    pub timestamp: String,
+    pub now: String,
+}
+
+impl crate::utils::TemplateContext for TemplateMeta {
+    fn env(&self) -> &HashMap<String, String> {
+        &self.env
+    }
+
+    fn date(&self) -> &str {
+        &self.date
+    }
+
+    fn timestamp(&self) -> &str {
+        &self.timestamp
+    }
+
+    fn now(&self) -> &str {
+        &self.now
+    }
 }
 
 // --- Helper Functions ---
@@ -84,6 +108,11 @@ pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
     let branch = utils::get_current_branch().await?;
     let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
     let project_name = utils::get_project_name();
+    let env = std::env::vars().collect::<HashMap<String, String>>();
+    let now = Utc::now();
+    let date = now.format("%Y-%m-%d").to_string();
+    let timestamp = now.timestamp().to_string();
+    let now = now.to_rfc3339_opts(SecondsFormat::Secs, true);
 
     Ok(TemplateMeta {
         tag,
@@ -97,6 +126,10 @@ pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
         branch,
         previous_tag,
         project_name,
+        env,
+        date,
+        timestamp,
+        now,
     })
 }
 

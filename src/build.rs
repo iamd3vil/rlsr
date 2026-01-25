@@ -23,10 +23,32 @@ pub struct BuildMeta {
     pub patch: u32,
     pub prerelease: String,
     pub short_commit: String,
+    pub env: std::collections::HashMap<String, String>,
+    pub date: String,
+    pub timestamp: String,
+    pub now: String,
     pub os: String,
     pub arch: String,
     pub arm: String,
     pub target: String,
+}
+
+impl utils::TemplateContext for BuildMeta {
+    fn env(&self) -> &std::collections::HashMap<String, String> {
+        &self.env
+    }
+
+    fn date(&self) -> &str {
+        &self.date
+    }
+
+    fn timestamp(&self) -> &str {
+        &self.timestamp
+    }
+
+    fn now(&self) -> &str {
+        &self.now
+    }
 }
 
 pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) -> Result<String> {
@@ -60,6 +82,10 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
         patch: meta.patch,
         prerelease: meta.prerelease.clone(),
         short_commit: meta.short_commit.clone(),
+        env: meta.env.clone(),
+        date: meta.date.clone(),
+        timestamp: meta.timestamp.clone(),
+        now: meta.now.clone(),
         os: build.os.clone().unwrap_or_default(),
         arch: build.arch.clone().unwrap_or_default(),
         arm: build.arm.clone().unwrap_or_default(),
@@ -251,6 +277,8 @@ mod tests {
     use crate::TemplateMeta;
 
     fn test_template_meta() -> TemplateMeta {
+        let mut env = std::collections::HashMap::new();
+        env.insert("RLSR_TEST".to_string(), "1".to_string());
         TemplateMeta {
             tag: "v1.2.3".to_string(),
             version: "1.2.3".to_string(),
@@ -263,6 +291,10 @@ mod tests {
             branch: "main".to_string(),
             previous_tag: "v1.2.2".to_string(),
             project_name: "rlsr".to_string(),
+            env,
+            date: "2025-01-25".to_string(),
+            timestamp: "1706180400".to_string(),
+            now: "2025-01-25T10:30:00Z".to_string(),
         }
     }
 
@@ -304,6 +336,10 @@ mod tests {
         assert_eq!(build_meta.patch, meta.patch);
         assert_eq!(build_meta.prerelease, meta.prerelease);
         assert_eq!(build_meta.short_commit, meta.short_commit);
+        assert_eq!(build_meta.env, meta.env);
+        assert_eq!(build_meta.date, meta.date);
+        assert_eq!(build_meta.timestamp, meta.timestamp);
+        assert_eq!(build_meta.now, meta.now);
         assert_eq!(build_meta.os, "linux");
         assert_eq!(build_meta.arch, "amd64");
         assert_eq!(build_meta.arm, "7");

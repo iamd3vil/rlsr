@@ -36,6 +36,10 @@ impl Formatter for DefaultFormatter {
         let ctx = context!(
             commits => commits,
             meta => meta,
+            env => &meta.env,
+            date => &meta.date,
+            timestamp => &meta.timestamp,
+            now => &meta.now,
         );
 
         // Render the template with the context
