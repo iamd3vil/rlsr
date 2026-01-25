@@ -24,6 +24,7 @@
 - Use `cargo test` for unit tests. Tests currently live in-module with `#[cfg(test)]` and functions named `test_*`.
 - Add tests alongside the module you change, especially for checksum or release logic.
 - After modifying Rust code, run `cargo clippy` and fix any warnings.
+- Always run compile, clippy, and tests after changes (prefer `just` targets when available).
 
 ## Commit & Pull Request Guidelines
 - IMPORTANT: Check if the repo uses `jj` and use `jj` for commits/operations; otherwise use `git`.

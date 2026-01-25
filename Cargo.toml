@@ -47,6 +47,7 @@ config = { version = "0.13.3", features = ["yaml", "yaml-rust", "toml"] }
 regex = "1.10.6"
 minijinja = {version = "2.2.0", features = ["loader", "builtins"] }
 ring = "0.17.14"
+semver = "1.0.25"
 
 [dev-dependencies]
 tempfile = { version = "3.19" }

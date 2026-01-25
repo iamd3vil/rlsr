@@ -64,22 +64,11 @@ pub struct Checksum {
     pub algorithm: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Changelog {
     pub format: Option<String>,
     pub exclude: Option<Vec<String>>,
     pub template: Option<String>,
-}
-
-// Implement default for ChangeLog.
-impl Default for Changelog {
-    fn default() -> Self {
-        Changelog {
-            format: None,
-            exclude: None,
-            template: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

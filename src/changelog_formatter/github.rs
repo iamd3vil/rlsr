@@ -10,7 +10,7 @@ use crate::TemplateMeta;
 
 use super::{get_minijinja_env, Commit, Formatter};
 
-const DEFAULT_GH_TEMPLATE: &'static str = include_str!("tmpls/default_github_template.tpl");
+const DEFAULT_GH_TEMPLATE: &str = include_str!("tmpls/default_github_template.tpl");
 
 pub struct GithubFormatter {
     ghclient: Octocrab,

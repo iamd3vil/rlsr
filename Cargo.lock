@@ -1572,6 +1572,7 @@ dependencies = [
  "regex",
  "reqwest",
  "ring",
+ "semver",
  "serde",
  "serde_yaml",
  "sha1",
@@ -1749,6 +1750,12 @@ name = "self_cell"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2fdfc24bc566f839a2da4c4295b82db7d25a24253867d5c64355abb5799bdbe"
+
+[[package]]
+name = "semver"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "serde"

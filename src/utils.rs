@@ -6,10 +6,10 @@ use std::process::Output;
 use std::{env, fs, io};
 use tokio::{process::Command, task};
 
+use crate::changelog_formatter;
 use crate::config::{Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::{docker, ReleaseProvider};
-use crate::{changelog_formatter, TemplateMeta};
 use minijinja::{context, Environment};
 use regex::Regex;
 use std::fmt::Debug;
@@ -98,23 +98,10 @@ pub async fn get_all_tags() -> Result<Vec<String>> {
         .collect())
 }
 
-async fn get_previous_tag() -> Result<String> {
-    // Get previous tag's commit.
+pub async fn get_previous_tag() -> Result<String> {
+    // Use HEAD^ so the current tag isn't returned when HEAD is tagged.
     let mut cmd = Command::new("git");
-    cmd.args(vec!["rev-list", "--tags", "--skip=1", "--max-count=1"]);
-    let output = cmd.output().await?;
-    if !output.status.success() {
-        bail!(
-            "error getting previous tag commit: {}",
-            String::from_utf8_lossy(&output.stdout).to_string()
-        );
-    }
-    let prev_tag_commit = String::from_utf8_lossy(&output.stdout).to_string();
-    let prev_tag_commit = prev_tag_commit.trim();
-
-    // Get tag for the commit.
-    let mut cmd = Command::new("git");
-    cmd.args(vec!["describe", "--abbrev=0", "--tags", prev_tag_commit]);
+    cmd.args(vec!["describe", "--tags", "--abbrev=0", "HEAD^"]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(
@@ -219,8 +206,9 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         .await
         .wrap_err("error getting changelog formatter")?;
 
+    let template_meta = crate::build_template_meta(latest_tag.clone()).await?;
     fmter
-        .format(&commits, &TemplateMeta { tag: latest_tag })
+        .format(&commits, &template_meta)
         .await
         .wrap_err("error formatting changelog")
 }
@@ -282,6 +270,125 @@ pub async fn get_latest_commit_hash() -> Result<String> {
     Ok(commit_id)
 }
 
+pub async fn get_full_commit_hash() -> Result<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()
+        .await
+        .wrap_err_with(|| "error running git rev-parse")?;
+
+    if !output.status.success() {
+        bail!("Failed to fetch git commit ID: {}", &output.status);
+    }
+
+    let commit_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(commit_id)
+}
+
+pub async fn get_current_branch() -> Result<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .await
+        .wrap_err_with(|| "error running git rev-parse")?;
+
+    if !output.status.success() {
+        bail!("Failed to fetch git branch: {}", &output.status);
+    }
+
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(branch)
+}
+
+pub fn get_project_name() -> String {
+    // Prefer manifest-defined names; fall back to directory name.
+    if let Ok(contents) = fs::read_to_string("Cargo.toml") {
+        if let Some(name) = parse_cargo_package_name(&contents) {
+            return name;
+        }
+    }
+
+    if let Ok(contents) = fs::read_to_string("package.json") {
+        if let Some(name) = parse_package_json_name(&contents) {
+            return name;
+        }
+    }
+
+    if let Ok(contents) = fs::read_to_string("go.mod") {
+        if let Some(name) = parse_go_module_name(&contents) {
+            return name;
+        }
+    }
+
+    env::current_dir()
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
+        .unwrap_or_default()
+}
+
+fn parse_cargo_package_name(contents: &str) -> Option<String> {
+    // Lightweight parser to avoid pulling in a full TOML dependency.
+    let mut in_package_section = false;
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_package_section = trimmed == "[package]";
+            continue;
+        }
+
+        if !in_package_section || trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let (key, value) = match trimmed.split_once('=') {
+            Some(parts) => parts,
+            None => continue,
+        };
+        if key.trim() != "name" {
+            continue;
+        }
+
+        let value = value.trim();
+        let value = value.strip_prefix('"')?;
+        let end = value.find('"')?;
+        return Some(value[..end].to_string());
+    }
+
+    None
+}
+
+fn parse_package_json_name(contents: &str) -> Option<String> {
+    // Regex keeps this minimal and avoids a JSON dependency.
+    let re = Regex::new(r#""name"\s*:\s*"([^"]+)""#).ok()?;
+    let caps = re.captures(contents)?;
+    Some(caps.get(1)?.as_str().to_string())
+}
+
+fn parse_go_module_name(contents: &str) -> Option<String> {
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("module ") {
+            let module = rest.split_whitespace().next()?;
+            let module = module.trim_matches('"');
+            return Some(module.rsplit('/').next().unwrap_or(module).to_string());
+        }
+    }
+
+    None
+}
+
 /// render_template renders a template with the given context using minijinja.
 pub fn render_template<S: serde::Serialize + Debug>(tmpl: &str, meta: S) -> String {
     let mut env = Environment::new();
@@ -315,4 +422,102 @@ pub async fn archive_files(
     })
     .await?;
     path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+    use tempfile::tempdir;
+
+    fn cwd_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct DirGuard {
+        original: std::path::PathBuf,
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
+        }
+    }
+
+    fn with_temp_dir<F: FnOnce(&std::path::Path)>(f: F) {
+        let _lock = cwd_lock().lock().unwrap();
+        let original = env::current_dir().unwrap();
+        let temp = tempdir().unwrap();
+        env::set_current_dir(temp.path()).unwrap();
+        let _guard = DirGuard { original };
+        f(temp.path());
+    }
+
+    #[test]
+    fn test_parse_cargo_package_name() {
+        let contents = r#"
+[package]
+name = "example"
+version = "0.1.0"
+"#;
+        assert_eq!(
+            parse_cargo_package_name(contents),
+            Some("example".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_package_json_name() {
+        let contents = r#"{ "name": "example-app", "version": "1.0.0" }"#;
+        assert_eq!(
+            parse_package_json_name(contents),
+            Some("example-app".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_go_module_name() {
+        let contents = r#"
+module example.com/acme/widget
+
+go 1.22
+"#;
+        assert_eq!(parse_go_module_name(contents), Some("widget".to_string()));
+    }
+
+    #[test]
+    fn test_get_project_name_prefers_cargo() {
+        with_temp_dir(|dir| {
+            fs::write(
+                dir.join("Cargo.toml"),
+                r#"
+[package]
+name = "cargo-proj"
+version = "0.1.0"
+"#,
+            )
+            .unwrap();
+            fs::write(dir.join("package.json"), r#"{ "name": "npm-proj" }"#).unwrap();
+            fs::write(dir.join("go.mod"), "module example.com/go-proj\n").unwrap();
+
+            assert_eq!(get_project_name(), "cargo-proj");
+        });
+    }
+
+    #[test]
+    fn test_get_project_name_falls_back_to_go_mod() {
+        with_temp_dir(|dir| {
+            fs::write(dir.join("go.mod"), "module example.com/go-proj\n").unwrap();
+            assert_eq!(get_project_name(), "go-proj");
+        });
+    }
+
+    #[test]
+    fn test_get_project_name_falls_back_to_dir() {
+        with_temp_dir(|dir| {
+            let expected = dir.file_name().unwrap().to_string_lossy().to_string();
+            assert_eq!(get_project_name(), expected);
+        });
+    }
 }

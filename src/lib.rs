@@ -1,6 +1,7 @@
 use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
 use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, trace, warn};
+use semver::Version;
 use std::sync::Arc;
 use tokio::{fs, sync::Mutex};
 
@@ -24,9 +25,80 @@ pub struct Opts {
 #[derive(Debug, Clone, Serialize)]
 pub struct TemplateMeta {
     pub tag: String,
+    pub version: String,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub prerelease: String,
+    pub commit: String,
+    pub short_commit: String,
+    pub branch: String,
+    pub previous_tag: String,
+    pub project_name: String,
 }
 
 // --- Helper Functions ---
+
+#[derive(Debug, Clone)]
+pub struct VersionMeta {
+    pub tag: String,
+    pub version: String,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub prerelease: String,
+}
+
+fn parse_version_meta(tag: &str) -> VersionMeta {
+    // Allow v/V-prefixed tags; non-semver tags fall back to empty version fields.
+    let version_str = tag
+        .strip_prefix('v')
+        .or_else(|| tag.strip_prefix('V'))
+        .unwrap_or(tag);
+    if let Ok(version) = Version::parse(version_str) {
+        VersionMeta {
+            tag: tag.to_string(),
+            version: version_str.to_string(),
+            major: u32::try_from(version.major).unwrap_or(0),
+            minor: u32::try_from(version.minor).unwrap_or(0),
+            patch: u32::try_from(version.patch).unwrap_or(0),
+            prerelease: version.pre.as_str().to_string(),
+        }
+    } else {
+        VersionMeta {
+            tag: tag.to_string(),
+            version: String::new(),
+            major: 0,
+            minor: 0,
+            patch: 0,
+            prerelease: String::new(),
+        }
+    }
+}
+
+pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
+    let version_meta = parse_version_meta(&tag);
+    // Git metadata is best-effort; previous tag may be empty on first release.
+    let commit = utils::get_full_commit_hash().await?;
+    let short_commit = utils::get_latest_commit_hash().await?;
+    let branch = utils::get_current_branch().await?;
+    let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
+    let project_name = utils::get_project_name();
+
+    Ok(TemplateMeta {
+        tag,
+        version: version_meta.version,
+        major: version_meta.major,
+        minor: version_meta.minor,
+        patch: version_meta.patch,
+        prerelease: version_meta.prerelease,
+        commit,
+        short_commit,
+        branch,
+        previous_tag,
+        project_name,
+    })
+}
 
 /// Checks repository status (cleanliness, tag) and updates the publish flag.
 async fn check_repo_status(publish: &mut bool) -> Result<()> {
@@ -84,8 +156,9 @@ async fn get_template_metadata() -> Result<Arc<TemplateMeta>> {
     } else {
         get_latest_commit_hash().await?
     };
-    debug!("Tag/hash for templating: {}", tag);
-    Ok(Arc::new(TemplateMeta { tag }))
+    let template_meta = build_template_meta(tag).await?;
+    debug!("Tag/hash for templating: {}", template_meta.tag);
+    Ok(Arc::new(template_meta))
 }
 
 /// Executes a list of hook commands.

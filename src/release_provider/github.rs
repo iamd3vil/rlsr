@@ -15,7 +15,7 @@ const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
 #[async_trait]
 impl ReleaseProvider for Github {
     async fn publish(
-        self: &Self,
+        &self,
         release: &Release,
         all_archives: Vec<String>,
         latest_tag: String,

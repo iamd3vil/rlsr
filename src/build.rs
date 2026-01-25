@@ -37,7 +37,7 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
     execute_posthook(release, build, &build_meta).await?;
 
     // Copy artifact and create archive if needed
-    process_artifacts(release, build, meta, &build_meta).await
+    process_artifacts(release, build, &build_meta).await
 }
 
 fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
@@ -114,7 +114,6 @@ async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMe
 async fn process_artifacts(
     release: &Release,
     build: &Build,
-    meta: &TemplateMeta,
     build_meta: &BuildMeta,
 ) -> Result<String> {
     let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
