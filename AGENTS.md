@@ -26,6 +26,7 @@
 - After modifying Rust code, run `cargo clippy` and fix any warnings.
 
 ## Commit & Pull Request Guidelines
+- IMPORTANT: Check if the repo uses `jj` and use `jj` for commits/operations; otherwise use `git`.
 - Commit messages follow Conventional Commits (examples: `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`, optional scopes like `feat(checksum): ...`). Also a commit body(with bullet points) wherever appropriate.
 - PRs should include a short description, testing notes, and doc updates if behavior changes. Include screenshots for docs UI changes.
 

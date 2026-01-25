@@ -34,7 +34,7 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
     }
 
     // Execute posthook if present
-    execute_posthook(release, build).await?;
+    execute_posthook(release, build, &build_meta).await?;
 
     // Copy artifact and create archive if needed
     process_artifacts(release, build, meta, &build_meta).await
@@ -93,8 +93,9 @@ async fn execute_build_command(
     utils::execute_command(&cmd, &envs).await
 }
 
-async fn execute_posthook(release: &Release, build: &Build) -> Result<()> {
+async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMeta) -> Result<()> {
     if let Some(posthook) = &build.posthook {
+        let posthook = utils::render_template(posthook, build_meta);
         info!(
             "executing posthook: `{}` for build: {}",
             posthook, build.name
@@ -102,7 +103,7 @@ async fn execute_posthook(release: &Release, build: &Build) -> Result<()> {
 
         let envs = collect_envs(release, build);
 
-        let output = utils::execute_command(posthook, &envs).await?;
+        let output = utils::execute_command(&posthook, &envs).await?;
         if !output.status.success() {
             bail!("posthook failed: {}", posthook);
         }
@@ -117,7 +118,7 @@ async fn process_artifacts(
     build_meta: &BuildMeta,
 ) -> Result<String> {
     let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
-    let bin_name = utils::render_template(bin_name, meta);
+    let bin_name = utils::render_template(bin_name, build_meta);
 
     // Copy artifact to dist folder
     let bin_path = copy_artifact_to_dist(release, build, &bin_name).await?;
