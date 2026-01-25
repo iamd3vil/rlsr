@@ -414,6 +414,19 @@ pub fn render_template<T: TemplateContext>(tmpl: &str, meta: &T) -> String {
     tpl.render(ctx).unwrap()
 }
 
+pub fn render_envs<T: TemplateContext>(
+    envs: &Option<Vec<String>>,
+    meta: &T,
+) -> Option<Vec<String>> {
+    let envs = envs.as_ref()?;
+    let rendered: Vec<String> = envs.iter().map(|env| render_template(env, meta)).collect();
+    if rendered.is_empty() {
+        None
+    } else {
+        Some(rendered)
+    }
+}
+
 pub fn add_string_filters(env: &mut Environment) {
     env.add_filter("tolower", tolower_filter);
     env.add_filter("toupper", toupper_filter);

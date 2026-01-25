@@ -93,14 +93,14 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
     }
 }
 
-fn collect_envs(release: &Release, build: &Build) -> Option<Vec<String>> {
-    let envs: Vec<String> = release
-        .env
-        .iter()
-        .chain(build.env.iter())
-        .flatten()
-        .cloned()
-        .collect();
+fn collect_envs(release: &Release, build: &Build, build_meta: &BuildMeta) -> Option<Vec<String>> {
+    let mut envs = Vec::new();
+    if let Some(release_envs) = utils::render_envs(&release.env, build_meta) {
+        envs.extend(release_envs);
+    }
+    if let Some(build_envs) = utils::render_envs(&build.env, build_meta) {
+        envs.extend(build_envs);
+    }
     if envs.is_empty() {
         None
     } else {
@@ -114,7 +114,7 @@ async fn execute_prehook(release: &Release, build: &Build, build_meta: &BuildMet
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
-        let envs = collect_envs(release, build);
+        let envs = collect_envs(release, build, build_meta);
 
         let output = utils::execute_command(&prehook, &envs).await?;
         if !output.status.success() {
@@ -131,7 +131,7 @@ async fn execute_build_command(
 ) -> Result<std::process::Output> {
     debug!("executing command: {}", build.command);
 
-    let envs = collect_envs(release, build);
+    let envs = collect_envs(release, build, build_meta);
 
     debug!("envs: {:?}", envs);
 
@@ -147,7 +147,7 @@ async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMe
             posthook, build.name
         );
 
-        let envs = collect_envs(release, build);
+        let envs = collect_envs(release, build, build_meta);
 
         let output = utils::execute_command(&posthook, &envs).await?;
         if !output.status.success() {
@@ -164,9 +164,10 @@ async fn process_artifacts(
 ) -> Result<String> {
     let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
     let bin_name = utils::render_template(bin_name, build_meta);
+    let artifact = utils::render_template(&build.artifact, build_meta);
 
     // Copy artifact to dist folder
-    let bin_path = copy_artifact_to_dist(release, build, &bin_name).await?;
+    let bin_path = copy_artifact_to_dist(release, &artifact, &bin_name).await?;
 
     let archive_name = utils::render_template(&build.archive_name, build_meta);
     let no_archive = build.no_archive.is_some_and(|val| val);
@@ -175,7 +176,7 @@ async fn process_artifacts(
         // Create an archive
         debug!("creating an archive for {}", &archive_name);
 
-        let files = prepare_archive_files(release, build, &bin_path).await?;
+        let files = prepare_archive_files(release, build, &artifact, &bin_path, build_meta).await?;
 
         let zip_path = archive_files(files, release.dist_folder.clone(), archive_name.clone())
             .await
@@ -184,7 +185,7 @@ async fn process_artifacts(
         Ok(zip_path)
     } else {
         // Copy artifact with the final name
-        copy_artifact_with_name(release, build, &archive_name).await?;
+        copy_artifact_with_name(release, &artifact, &archive_name).await?;
 
         Ok(Utf8Path::new(&release.dist_folder)
             .join(&archive_name)
@@ -192,12 +193,16 @@ async fn process_artifacts(
     }
 }
 
-async fn copy_artifact_to_dist(release: &Release, build: &Build, bin_name: &str) -> Result<String> {
+async fn copy_artifact_to_dist(
+    release: &Release,
+    artifact: &str,
+    bin_name: &str,
+) -> Result<String> {
     let bin_path = Utf8Path::new(&release.dist_folder).join(bin_name);
 
-    fs::copy(&build.artifact, &bin_path)
+    fs::copy(artifact, &bin_path)
         .await
-        .with_context(|| format!("error while copying artifact: {}", build.artifact))?;
+        .with_context(|| format!("error while copying artifact: {}", artifact))?;
 
     Ok(bin_path.to_string())
 }
@@ -205,13 +210,15 @@ async fn copy_artifact_to_dist(release: &Release, build: &Build, bin_name: &str)
 async fn prepare_archive_files(
     release: &Release,
     build: &Build,
+    artifact: &str,
     bin_path: &str,
+    build_meta: &BuildMeta,
 ) -> Result<Vec<ArchiveFile>> {
     // Get the binary name from artifact
-    let artifact_path = Utf8Path::new(&build.artifact);
+    let artifact_path = Utf8Path::new(artifact);
     let bin_name = artifact_path
         .file_name()
-        .with_context(|| format!("error getting filename from artifact: {}", &build.artifact))?;
+        .with_context(|| format!("error getting filename from artifact: {}", artifact))?;
 
     // Add all files that need to be archived
     let bin_file = ArchiveFile {
@@ -226,9 +233,10 @@ async fn prepare_archive_files(
         files.extend(
             additional_files
                 .iter()
+                .map(|f| utils::render_template(f, build_meta))
                 .map(|f| ArchiveFile {
                     disk_path: f.clone(),
-                    archive_filename: Utf8Path::new(f).file_name().unwrap().to_string(),
+                    archive_filename: Utf8Path::new(&f).file_name().unwrap().to_string(),
                 })
                 .collect::<Vec<ArchiveFile>>(),
         );
@@ -239,9 +247,10 @@ async fn prepare_archive_files(
         files.extend(
             rls_additional_files
                 .iter()
+                .map(|f| utils::render_template(f, build_meta))
                 .map(|f| ArchiveFile {
                     disk_path: f.clone(),
-                    archive_filename: Utf8Path::new(f).file_name().unwrap().to_string(),
+                    archive_filename: Utf8Path::new(&f).file_name().unwrap().to_string(),
                 })
                 .collect::<Vec<ArchiveFile>>(),
         );
@@ -258,11 +267,11 @@ async fn prepare_archive_files(
 
 async fn copy_artifact_with_name(
     release: &Release,
-    build: &Build,
+    artifact: &str,
     archive_name: &str,
 ) -> Result<()> {
     fs::copy(
-        &build.artifact,
+        artifact,
         Utf8Path::new(&release.dist_folder).join(archive_name),
     )
     .await
@@ -274,6 +283,7 @@ async fn copy_artifact_with_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ReleaseTargets;
     use crate::TemplateMeta;
 
     fn test_template_meta() -> TemplateMeta {
@@ -295,6 +305,22 @@ mod tests {
             date: "2025-01-25".to_string(),
             timestamp: "1706180400".to_string(),
             now: "2025-01-25T10:30:00Z".to_string(),
+        }
+    }
+
+    fn base_release() -> Release {
+        Release {
+            name: "Test Release".to_string(),
+            dist_folder: "./dist".to_string(),
+            builds: Vec::new(),
+            targets: ReleaseTargets {
+                github: None,
+                docker: None,
+            },
+            checksum: None,
+            env: None,
+            additional_files: None,
+            hooks: None,
         }
     }
 
@@ -356,5 +382,57 @@ mod tests {
         assert!(build_meta.arch.is_empty());
         assert!(build_meta.arm.is_empty());
         assert!(build_meta.target.is_empty());
+    }
+
+    #[test]
+    fn test_collect_envs_renders_templates() {
+        let mut release = base_release();
+        release.env = Some(vec!["RELEASE={{ meta.tag }}".to_string()]);
+
+        let mut build = base_build();
+        build.env = Some(vec![
+            "BUILD={{ meta.build_name }}".to_string(),
+            "TARGET={{ meta.target }}".to_string(),
+        ]);
+        build.target = Some("x86_64-unknown-linux-musl".to_string());
+
+        let meta = test_template_meta();
+        let build_meta = create_build_meta(&build, &meta);
+        let envs = collect_envs(&release, &build, &build_meta).unwrap();
+
+        assert_eq!(
+            envs,
+            vec![
+                "RELEASE=v1.2.3".to_string(),
+                "BUILD=Linux build".to_string(),
+                "TARGET=x86_64-unknown-linux-musl".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_archive_files_renders_additional_files() {
+        let mut release = base_release();
+        release.additional_files = Some(vec!["dist/{{ meta.tag }}/README.md".to_string()]);
+
+        let mut build = base_build();
+        build.additional_files = Some(vec!["dist/{{ meta.os }}/LICENSE".to_string()]);
+        build.os = Some("linux".to_string());
+
+        let meta = test_template_meta();
+        let build_meta = create_build_meta(&build, &meta);
+        let files =
+            prepare_archive_files(&release, &build, "target/bin/app", "dist/app", &build_meta)
+                .await
+                .unwrap();
+
+        assert!(files.contains(&ArchiveFile {
+            disk_path: "dist/v1.2.3/README.md".to_string(),
+            archive_filename: "README.md".to_string(),
+        }));
+        assert!(files.contains(&ArchiveFile {
+            disk_path: "dist/linux/LICENSE".to_string(),
+            archive_filename: "LICENSE".to_string(),
+        }));
     }
 }

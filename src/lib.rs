@@ -199,12 +199,15 @@ async fn execute_hooks(
     hooks: &Option<Vec<String>>,
     env: &Option<Vec<String>>,
     hook_type: HookType,
+    template_meta: &TemplateMeta,
 ) -> Result<()> {
     if let Some(commands) = hooks {
         info!("Executing {} hooks...", hook_type);
+        let envs = utils::render_envs(env, template_meta);
         for command in commands {
+            let command = utils::render_template(command, template_meta);
             info!("Executing hook: {}", command);
-            let output = utils::execute_command(command, env)
+            let output = utils::execute_command(&command, &envs)
                 .await
                 .with_context(|| {
                     format!(
@@ -461,16 +464,21 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         // Execute before hooks
         if let Some(hooks) = &release_config.hooks {
-            execute_hooks(&hooks.before, &release_config.env, HookType::Before)
-                .await
-                .with_context(|| {
-                    format!("Before hooks failed for release '{}'", release_config.name)
-                })?;
+            execute_hooks(
+                &hooks.before,
+                &release_config.env,
+                HookType::Before,
+                template_meta.as_ref(),
+            )
+            .await
+            .with_context(|| {
+                format!("Before hooks failed for release '{}'", release_config.name)
+            })?;
         }
 
         // Run builds
         let all_archives = Arc::new(Mutex::new(Vec::new()));
-        run_builds_for_release(release_config, all_archives.clone(), template_meta)
+        run_builds_for_release(release_config, all_archives.clone(), template_meta.clone())
             .await
             .with_context(|| {
                 format!("Build process failed for release '{}'", release_config.name)
@@ -478,11 +486,14 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         // Execute after hooks
         if let Some(hooks) = &release_config.hooks {
-            execute_hooks(&hooks.after, &release_config.env, HookType::After)
-                .await
-                .with_context(|| {
-                    format!("After hooks failed for release '{}'", release_config.name)
-                })?;
+            execute_hooks(
+                &hooks.after,
+                &release_config.env,
+                HookType::After,
+                template_meta.as_ref(),
+            )
+            .await
+            .with_context(|| format!("After hooks failed for release '{}'", release_config.name))?;
         }
 
         // Collect archive paths
