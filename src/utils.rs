@@ -184,12 +184,11 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
                     if exclude_patterns.iter().any(|regex| regex.is_match(subject)) {
                         None
                     } else {
-                        Some(changelog_formatter::Commit {
-                            hash: hash.to_owned(),
-                            subject: subject.to_owned(),
-                            email: email.to_owned(),
-                            handle: None,
-                        })
+                        Some(changelog_formatter::Commit::from_parts(
+                            hash.to_owned(),
+                            subject.to_owned(),
+                            email.to_owned(),
+                        ))
                     }
                 }
                 _ => None,
