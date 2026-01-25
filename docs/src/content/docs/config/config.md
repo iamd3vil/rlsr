@@ -122,6 +122,10 @@ The `builds` section is an array that defines one or more build configurations. 
 - `bin_name`: (Optional) The name of the binary produced.
 - `artifact`: The path to the built artifact.
 - `archive_name`: The name of the archive containing the artifact.
+- `os`: (Optional) The target operating system label.
+- `arch`: (Optional) The target architecture label.
+- `arm`: (Optional) The ARM version label.
+- `target`: (Optional) The target triple.
 - `no_archive`: If true, the artifact won't be archived.
 - `prehook`: (Optional) A script to run before this specific build.
 - `posthook`: (Optional) A script to run after this specific build.
@@ -130,23 +134,20 @@ The `builds` section is an array that defines one or more build configurations. 
 
 ## Templating
 
-Rlsr supports templating in various configuration fields, allowing you to dynamically generate values based on release metadata. The templating system uses the Handlebars syntax with double curly braces `{{ variable }}`.
+Rlsr supports templating in various configuration fields, allowing you to dynamically generate values based on release metadata. The templating system uses Minijinja (Jinja2-compatible) with `{{ variable }}` and `{% if %}` syntax.
 
-### The `meta` Object
-
-The `meta` object provides access to release metadata and can be used in several configuration fields:
-
-- `meta.tag`: The Git tag for the current release (e.g., `v1.2.3`)
-- `meta.version`: The version number without the 'v' prefix (e.g., `1.2.3`)
+For a full reference of template variables and filters, see the [Templating](/templating/) page.
 
 ### Supported Fields for Templating
 
 Templating can be used in the following configuration fields:
 
-- `archive_name`: Define dynamic archive names based on version or tag
-- `artifact`: Specify dynamic artifact paths
-- `prehook`: Generate dynamic pre-build scripts
-- `posthook`: Generate dynamic post-build scripts
+- Release hooks: `hooks.before`, `hooks.after`
+- Release env values: `env`
+- Build fields: `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
+- Build env values: `env`
+- Additional files: release and build `additional_files`
+- Docker image: `targets.docker.image`
 
 ### Example Usage
 
@@ -179,6 +180,7 @@ Rlsr also supports templating in the changelog section. The following variables 
 
 - `meta.tag`: The Git tag for the current release (e.g., `v1.2.3`)
 - `commits`: An array of commits since the last release
+  - See [Templating](/templating/) for the complete list of changelog fields and filters.
 
 ### Example Template
 

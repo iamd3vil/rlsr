@@ -48,6 +48,8 @@ targets:
 - `dockerfile`: The path to the Dockerfile relative to your project root.
 - `context`: The build context for Docker, usually the root of your project.
 
+The `image` value supports templating (see [Templating](/templating/)). If you omit a tag or digest, rlsr appends the current tag automatically.
+
 ## Multiple Targets
 
 You can specify multiple targets in your configuration to release to different platforms simultaneously. For example:

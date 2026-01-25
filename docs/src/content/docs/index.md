@@ -30,3 +30,7 @@ If `--skip-publish` flag is given, `rlsr` will skip publishing. `rm-dist` flag c
 ## Configuration 🔧
 
 [Configuration](/config/config/) can be found here.
+
+## Templating
+
+[Templating](/templating/) documents available template variables and filters.

@@ -16,6 +16,7 @@ export default defineConfig({
           items: [
             { label: "Configuration", slug: "config/config" },
             { label: "Release Targets", slug: "config/targets" },
+            { label: "Templating", slug: "templating" },
           ],
         },
       ],
