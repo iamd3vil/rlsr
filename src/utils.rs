@@ -111,6 +111,51 @@ pub async fn get_previous_tag() -> Result<String> {
     Ok(String::from(prev_tag.trim()))
 }
 
+pub async fn get_github_release_url(tag: &str) -> Result<String> {
+    let Some((owner, repo)) = get_github_repo_from_remote().await? else {
+        return Ok(String::new());
+    };
+    Ok(format!(
+        "https://github.com/{}/{}/releases/tag/{}",
+        owner, repo, tag
+    ))
+}
+
+async fn get_github_repo_from_remote() -> Result<Option<(String, String)>> {
+    let mut cmd = Command::new("git");
+    cmd.args(["config", "--get", "remote.origin.url"]);
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let remote = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(parse_github_repo_url(&remote))
+}
+
+fn parse_github_repo_url(remote: &str) -> Option<(String, String)> {
+    let remote = remote.trim();
+    let rest = if let Some(rest) = remote.strip_prefix("git@github.com:") {
+        rest
+    } else if let Some(rest) = remote.strip_prefix("https://github.com/") {
+        rest
+    } else if let Some(rest) = remote.strip_prefix("http://github.com/") {
+        rest
+    } else if let Some(rest) = remote.strip_prefix("ssh://git@github.com/") {
+        rest
+    } else {
+        return None;
+    };
+
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    let mut parts = rest.splitn(3, '/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
 // Get formatted git log.
 pub async fn get_all_git_log() -> Result<String> {
     let mut cmd = Command::new("git");
@@ -508,5 +553,22 @@ version = "0.1.0"
             let expected = dir.file_name().unwrap().to_string_lossy().to_string();
             assert_eq!(get_project_name(), expected);
         });
+    }
+
+    #[test]
+    fn test_parse_github_repo_url_variants() {
+        assert_eq!(
+            parse_github_repo_url("git@github.com:owner/repo.git"),
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert_eq!(
+            parse_github_repo_url("https://github.com/owner/repo"),
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert_eq!(
+            parse_github_repo_url("ssh://git@github.com/owner/repo.git"),
+            Some(("owner".to_string(), "repo".to_string()))
+        );
+        assert!(parse_github_repo_url("https://gitlab.com/owner/repo").is_none());
     }
 }

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
 use minijinja::Environment;
+use regex::Regex;
 use serde::Serialize;
 
 use crate::templating;
@@ -75,6 +76,7 @@ pub fn get_minijinja_env(content: String) -> Result<Environment<'static>> {
     env.add_filter("ends_with", ends_with_filter);
     env.add_filter("trim", trim_filter);
     env.add_filter("contains", contains_filter);
+    env.add_filter("match", match_filter);
     env.set_lstrip_blocks(true);
     env.set_trim_blocks(true);
     Ok(env)
@@ -97,6 +99,13 @@ fn trim_filter(value: String, chars: String) -> String {
 
 fn contains_filter(value: String, needle: String) -> bool {
     value.contains(&needle)
+}
+
+fn match_filter(value: String, pattern: String) -> bool {
+    match Regex::new(&pattern) {
+        Ok(re) => re.is_match(&value),
+        Err(_) => false,
+    }
 }
 
 fn parse_conventional_subject(subject: &str) -> (Option<String>, Option<String>, bool) {
@@ -188,5 +197,12 @@ mod tests {
         );
         assert!(contains_filter("hello".to_string(), "ell".to_string()));
         assert!(!contains_filter("hello".to_string(), "nope".to_string()));
+    }
+
+    #[test]
+    fn test_match_filter() {
+        assert!(match_filter("feat: add".to_string(), "^feat:".to_string()));
+        assert!(!match_filter("fix: add".to_string(), "^feat:".to_string()));
+        assert!(!match_filter("anything".to_string(), "[".to_string()));
     }
 }

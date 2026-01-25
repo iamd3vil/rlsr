@@ -28,6 +28,9 @@ pub struct BuildMeta {
     pub date: String,
     pub timestamp: String,
     pub now: String,
+    pub is_snapshot: bool,
+    pub is_prerelease: bool,
+    pub is_dirty: bool,
     pub os: String,
     pub arch: String,
     pub arm: String,
@@ -87,6 +90,9 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
         date: meta.date.clone(),
         timestamp: meta.timestamp.clone(),
         now: meta.now.clone(),
+        is_snapshot: meta.is_snapshot,
+        is_prerelease: meta.is_prerelease,
+        is_dirty: meta.is_dirty,
         os: build.os.clone().unwrap_or_default(),
         arch: build.arch.clone().unwrap_or_default(),
         arm: build.arm.clone().unwrap_or_default(),
@@ -302,6 +308,10 @@ mod tests {
             branch: "main".to_string(),
             previous_tag: "v1.2.2".to_string(),
             project_name: "rlsr".to_string(),
+            release_url: "https://github.com/owner/repo/releases/tag/v1.2.3".to_string(),
+            is_snapshot: false,
+            is_prerelease: false,
+            is_dirty: false,
             env,
             date: "2025-01-25".to_string(),
             timestamp: "1706180400".to_string(),
@@ -367,6 +377,9 @@ mod tests {
         assert_eq!(build_meta.date, meta.date);
         assert_eq!(build_meta.timestamp, meta.timestamp);
         assert_eq!(build_meta.now, meta.now);
+        assert_eq!(build_meta.is_snapshot, meta.is_snapshot);
+        assert_eq!(build_meta.is_prerelease, meta.is_prerelease);
+        assert_eq!(build_meta.is_dirty, meta.is_dirty);
         assert_eq!(build_meta.os, "linux");
         assert_eq!(build_meta.arch, "amd64");
         assert_eq!(build_meta.arm, "7");

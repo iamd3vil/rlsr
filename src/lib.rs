@@ -38,6 +38,10 @@ pub struct TemplateMeta {
     pub branch: String,
     pub previous_tag: String,
     pub project_name: String,
+    pub release_url: String,
+    pub is_snapshot: bool,
+    pub is_prerelease: bool,
+    pub is_dirty: bool,
     pub env: HashMap<String, String>,
     pub date: String,
     pub timestamp: String,
@@ -109,6 +113,12 @@ pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
     let branch = utils::get_current_branch().await?;
     let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
     let project_name = utils::get_project_name();
+    let release_url = utils::get_github_release_url(&tag)
+        .await
+        .unwrap_or_default();
+    let is_snapshot = !is_at_latest_tag().await.unwrap_or(false);
+    let is_dirty = !is_repo_clean().await.unwrap_or(false);
+    let is_prerelease = !version_meta.prerelease.is_empty();
     let env = std::env::vars().collect::<HashMap<String, String>>();
     let now = Utc::now();
     let date = now.format("%Y-%m-%d").to_string();
@@ -127,6 +137,10 @@ pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
         branch,
         previous_tag,
         project_name,
+        release_url,
+        is_snapshot,
+        is_prerelease,
+        is_dirty,
         env,
         date,
         timestamp,
