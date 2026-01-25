@@ -78,6 +78,10 @@ pub struct Build {
     pub bin_name: Option<String>,
     pub archive_name: String,
     pub name: String,
+    pub os: Option<String>,
+    pub arch: Option<String>,
+    pub arm: Option<String>,
+    pub target: Option<String>,
 
     /// Environment variables to set for the build.
     pub env: Option<Vec<String>>,
@@ -131,5 +135,52 @@ pub fn parse_config(cfg_path: &str) -> Result<Config> {
         Err(err) => {
             bail!("error reading config: {}", err);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_target_fields_deserialize() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app"
+        name: "Linux build"
+        os: "linux"
+        arch: "amd64"
+        arm: "7"
+        target: "x86_64-unknown-linux-musl"
+      - command: "echo build2"
+        artifact: "./bin/app2"
+        archive_name: "app2"
+        name: "Default build"
+"#;
+
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let builds = &cfg.releases[0].builds;
+
+        assert_eq!(builds[0].os.as_deref(), Some("linux"));
+        assert_eq!(builds[0].arch.as_deref(), Some("amd64"));
+        assert_eq!(builds[0].arm.as_deref(), Some("7"));
+        assert_eq!(
+            builds[0].target.as_deref(),
+            Some("x86_64-unknown-linux-musl")
+        );
+
+        assert!(builds[1].os.is_none());
+        assert!(builds[1].arch.is_none());
+        assert!(builds[1].arm.is_none());
+        assert!(builds[1].target.is_none());
     }
 }

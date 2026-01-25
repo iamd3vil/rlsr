@@ -17,6 +17,16 @@ use crate::{
 pub struct BuildMeta {
     pub build_name: String,
     pub tag: String,
+    pub version: String,
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub prerelease: String,
+    pub short_commit: String,
+    pub os: String,
+    pub arch: String,
+    pub arm: String,
+    pub target: String,
 }
 
 pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) -> Result<String> {
@@ -44,6 +54,16 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
     BuildMeta {
         build_name: build.name.clone(),
         tag: meta.tag.clone(),
+        version: meta.version.clone(),
+        major: meta.major,
+        minor: meta.minor,
+        patch: meta.patch,
+        prerelease: meta.prerelease.clone(),
+        short_commit: meta.short_commit.clone(),
+        os: build.os.clone().unwrap_or_default(),
+        arch: build.arch.clone().unwrap_or_default(),
+        arm: build.arm.clone().unwrap_or_default(),
+        target: build.target.clone().unwrap_or_default(),
     }
 }
 
@@ -223,4 +243,82 @@ async fn copy_artifact_with_name(
     .with_context(|| "error while copying artifact to given name")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TemplateMeta;
+
+    fn test_template_meta() -> TemplateMeta {
+        TemplateMeta {
+            tag: "v1.2.3".to_string(),
+            version: "1.2.3".to_string(),
+            major: 1,
+            minor: 2,
+            patch: 3,
+            prerelease: String::new(),
+            commit: "abcdef1234567890".to_string(),
+            short_commit: "abcdef1".to_string(),
+            branch: "main".to_string(),
+            previous_tag: "v1.2.2".to_string(),
+            project_name: "rlsr".to_string(),
+        }
+    }
+
+    fn base_build() -> Build {
+        Build {
+            command: "echo build".to_string(),
+            artifact: "./bin/rlsr".to_string(),
+            bin_name: None,
+            archive_name: "rlsr.tar.gz".to_string(),
+            name: "Linux build".to_string(),
+            os: None,
+            arch: None,
+            arm: None,
+            target: None,
+            env: None,
+            prehook: None,
+            posthook: None,
+            no_archive: None,
+            additional_files: None,
+        }
+    }
+
+    #[test]
+    fn test_create_build_meta_populates_version_and_target_fields() {
+        let mut build = base_build();
+        build.os = Some("linux".to_string());
+        build.arch = Some("amd64".to_string());
+        build.arm = Some("7".to_string());
+        build.target = Some("x86_64-unknown-linux-musl".to_string());
+
+        let meta = test_template_meta();
+        let build_meta = create_build_meta(&build, &meta);
+
+        assert_eq!(build_meta.build_name, build.name);
+        assert_eq!(build_meta.tag, meta.tag);
+        assert_eq!(build_meta.version, meta.version);
+        assert_eq!(build_meta.major, meta.major);
+        assert_eq!(build_meta.minor, meta.minor);
+        assert_eq!(build_meta.patch, meta.patch);
+        assert_eq!(build_meta.prerelease, meta.prerelease);
+        assert_eq!(build_meta.short_commit, meta.short_commit);
+        assert_eq!(build_meta.os, "linux");
+        assert_eq!(build_meta.arch, "amd64");
+        assert_eq!(build_meta.arm, "7");
+        assert_eq!(build_meta.target, "x86_64-unknown-linux-musl");
+    }
+
+    #[test]
+    fn test_create_build_meta_defaults_empty_strings_for_missing_target_fields() {
+        let build = base_build();
+        let meta = test_template_meta();
+        let build_meta = create_build_meta(&build, &meta);
+
+        assert!(build_meta.os.is_empty());
+        assert!(build_meta.arch.is_empty());
+        assert!(build_meta.arm.is_empty());
+        assert!(build_meta.target.is_empty());
+    }
 }
