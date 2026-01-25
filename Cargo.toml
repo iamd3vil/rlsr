@@ -39,6 +39,10 @@ async-trait = "0.1"
 color-eyre = { version = "0.6", default-features = false }
 camino = "1.0.9"
 sha2 = "0.10.7"
+sha3 = "0.10.8"
+blake2 = "0.10.6"
+md-5 = "0.10.6"
+sha1 = "0.10.6"
 config = { version = "0.13.3", features = ["yaml", "yaml-rust", "toml"] }
 regex = "1.10.6"
 minijinja = {version = "2.2.0", features = ["loader", "builtins"] }

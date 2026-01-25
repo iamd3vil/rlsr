@@ -90,7 +90,9 @@ For detailed information on configuring targets, please refer to the [Release Ta
 
 The `checksum` section allows you to specify the algorithm used for generating checksums of your artifacts:
 
-- `algorithm`: The checksum algorithm (e.g., "sha256").
+- `algorithm`: The checksum algorithm.
+
+Supported algorithms: `sha256`, `sha512`, `sha3_256`, `sha3_512`, `blake2b`, `blake2s`, `md5`, `sha1`.
 
 ### Additional Files
 
