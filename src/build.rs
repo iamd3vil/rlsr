@@ -10,6 +10,7 @@ use tokio::fs;
 
 use crate::{
     config::{Build, Release},
+    templating,
     utils::{self, archive_files, ArchiveFile},
 };
 
@@ -33,7 +34,7 @@ pub struct BuildMeta {
     pub target: String,
 }
 
-impl utils::TemplateContext for BuildMeta {
+impl crate::templating::TemplateContext for BuildMeta {
     fn env(&self) -> &std::collections::HashMap<String, String> {
         &self.env
     }
@@ -95,10 +96,10 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
 
 fn collect_envs(release: &Release, build: &Build, build_meta: &BuildMeta) -> Option<Vec<String>> {
     let mut envs = Vec::new();
-    if let Some(release_envs) = utils::render_envs(&release.env, build_meta) {
+    if let Some(release_envs) = templating::render_envs(&release.env, build_meta) {
         envs.extend(release_envs);
     }
-    if let Some(build_envs) = utils::render_envs(&build.env, build_meta) {
+    if let Some(build_envs) = templating::render_envs(&build.env, build_meta) {
         envs.extend(build_envs);
     }
     if envs.is_empty() {
@@ -110,7 +111,7 @@ fn collect_envs(release: &Release, build: &Build, build_meta: &BuildMeta) -> Opt
 
 async fn execute_prehook(release: &Release, build: &Build, build_meta: &BuildMeta) -> Result<()> {
     if let Some(prehook) = &build.prehook {
-        let prehook = utils::render_template(prehook, build_meta);
+        let prehook = templating::render_template(prehook, build_meta);
 
         info!("executing prehook: `{}` for build: {}", prehook, build.name);
 
@@ -135,13 +136,13 @@ async fn execute_build_command(
 
     debug!("envs: {:?}", envs);
 
-    let cmd = utils::render_template(&build.command, build_meta);
+    let cmd = templating::render_template(&build.command, build_meta);
     utils::execute_command(&cmd, &envs).await
 }
 
 async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMeta) -> Result<()> {
     if let Some(posthook) = &build.posthook {
-        let posthook = utils::render_template(posthook, build_meta);
+        let posthook = templating::render_template(posthook, build_meta);
         info!(
             "executing posthook: `{}` for build: {}",
             posthook, build.name
@@ -163,13 +164,13 @@ async fn process_artifacts(
     build_meta: &BuildMeta,
 ) -> Result<String> {
     let bin_name = build.bin_name.as_ref().unwrap_or(&build.archive_name);
-    let bin_name = utils::render_template(bin_name, build_meta);
-    let artifact = utils::render_template(&build.artifact, build_meta);
+    let bin_name = templating::render_template(bin_name, build_meta);
+    let artifact = templating::render_template(&build.artifact, build_meta);
 
     // Copy artifact to dist folder
     let bin_path = copy_artifact_to_dist(release, &artifact, &bin_name).await?;
 
-    let archive_name = utils::render_template(&build.archive_name, build_meta);
+    let archive_name = templating::render_template(&build.archive_name, build_meta);
     let no_archive = build.no_archive.is_some_and(|val| val);
 
     if !no_archive {
@@ -233,7 +234,7 @@ async fn prepare_archive_files(
         files.extend(
             additional_files
                 .iter()
-                .map(|f| utils::render_template(f, build_meta))
+                .map(|f| templating::render_template(f, build_meta))
                 .map(|f| ArchiveFile {
                     disk_path: f.clone(),
                     archive_filename: Utf8Path::new(&f).file_name().unwrap().to_string(),
@@ -247,7 +248,7 @@ async fn prepare_archive_files(
         files.extend(
             rls_additional_files
                 .iter()
-                .map(|f| utils::render_template(f, build_meta))
+                .map(|f| templating::render_template(f, build_meta))
                 .map(|f| ArchiveFile {
                     disk_path: f.clone(),
                     archive_filename: Utf8Path::new(&f).file_name().unwrap().to_string(),

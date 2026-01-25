@@ -13,6 +13,7 @@ mod checksum;
 mod checksummer;
 pub mod config;
 mod release_provider;
+mod templating;
 mod utils;
 
 use config::{Config, Release};
@@ -43,7 +44,7 @@ pub struct TemplateMeta {
     pub now: String,
 }
 
-impl crate::utils::TemplateContext for TemplateMeta {
+impl crate::templating::TemplateContext for TemplateMeta {
     fn env(&self) -> &HashMap<String, String> {
         &self.env
     }
@@ -203,9 +204,9 @@ async fn execute_hooks(
 ) -> Result<()> {
     if let Some(commands) = hooks {
         info!("Executing {} hooks...", hook_type);
-        let envs = utils::render_envs(env, template_meta);
+        let envs = templating::render_envs(env, template_meta);
         for command in commands {
-            let command = utils::render_template(command, template_meta);
+            let command = templating::render_template(command, template_meta);
             info!("Executing hook: {}", command);
             let output = utils::execute_command(&command, &envs)
                 .await

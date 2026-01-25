@@ -4,6 +4,7 @@ use color_eyre::eyre::WrapErr;
 use minijinja::Environment;
 use serde::Serialize;
 
+use crate::templating;
 use crate::utils;
 use crate::TemplateMeta;
 
@@ -50,7 +51,7 @@ pub fn get_minijinja_env(content: String) -> Result<Environment<'static>> {
     let mut env = Environment::new();
     env.add_template_owned("tmpl", content)
         .wrap_err("error adding template")?;
-    utils::add_string_filters(&mut env);
+    templating::add_string_filters(&mut env);
     env.add_filter("starts_with", starts_with_filter);
     env.add_filter("ends_with", ends_with_filter);
     env.set_lstrip_blocks(true);

@@ -1,6 +1,6 @@
 use crate::config::{Docker as DockerConfig, Release};
 use crate::release_provider::ReleaseProvider;
-use crate::{build_template_meta, utils, TemplateMeta};
+use crate::{build_template_meta, templating, TemplateMeta};
 use async_trait::async_trait;
 use color_eyre::eyre::{bail, Context, Result};
 use log::info;
@@ -74,7 +74,7 @@ impl Docker {
 }
 
 fn render_docker_image(docker: &DockerConfig, latest_tag: &str, meta: &TemplateMeta) -> String {
-    let rendered = utils::render_template(&docker.image, meta);
+    let rendered = templating::render_template(&docker.image, meta);
     if image_has_tag_or_digest(&rendered) {
         rendered
     } else {
