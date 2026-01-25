@@ -392,9 +392,62 @@ fn parse_go_module_name(contents: &str) -> Option<String> {
 /// render_template renders a template with the given context using minijinja.
 pub fn render_template<S: serde::Serialize + Debug>(tmpl: &str, meta: S) -> String {
     let mut env = Environment::new();
+    add_string_filters(&mut env);
     env.add_template("tmpl", tmpl).unwrap();
     let tpl = env.get_template("tmpl").unwrap();
     tpl.render(context!(meta => meta)).unwrap()
+}
+
+pub fn add_string_filters(env: &mut Environment) {
+    env.add_filter("tolower", tolower_filter);
+    env.add_filter("toupper", toupper_filter);
+    env.add_filter("replace", replace_filter);
+    env.add_filter("trimprefix", trimprefix_filter);
+    env.add_filter("trimsuffix", trimsuffix_filter);
+    env.add_filter("title", title_filter);
+    env.add_filter("split", split_filter);
+}
+
+fn tolower_filter(value: String) -> String {
+    value.to_lowercase()
+}
+
+fn toupper_filter(value: String) -> String {
+    value.to_uppercase()
+}
+
+fn replace_filter(value: String, old: String, new: String) -> String {
+    value.replace(&old, &new)
+}
+
+fn trimprefix_filter(value: String, prefix: String) -> String {
+    value.strip_prefix(&prefix).unwrap_or(&value).to_string()
+}
+
+fn trimsuffix_filter(value: String, suffix: String) -> String {
+    value.strip_suffix(&suffix).unwrap_or(&value).to_string()
+}
+
+fn title_filter(value: String) -> String {
+    let mut out = String::new();
+    for (index, word) in value.split_whitespace().enumerate() {
+        if index > 0 {
+            out.push(' ');
+        }
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            out.extend(first.to_uppercase());
+            out.push_str(&chars.as_str().to_lowercase());
+        }
+    }
+    out
+}
+
+fn split_filter(value: String, sep: String) -> Vec<String> {
+    if sep.is_empty() {
+        return vec![value];
+    }
+    value.split(&sep).map(str::to_string).collect()
 }
 
 // Creates an zip archive with the file given.
@@ -519,5 +572,32 @@ version = "0.1.0"
             let expected = dir.file_name().unwrap().to_string_lossy().to_string();
             assert_eq!(get_project_name(), expected);
         });
+    }
+
+    #[test]
+    fn test_string_filters() {
+        assert_eq!(tolower_filter("AbC".to_string()), "abc");
+        assert_eq!(toupper_filter("AbC".to_string()), "ABC");
+        assert_eq!(
+            replace_filter("a-b".to_string(), "-".to_string(), "_".to_string()),
+            "a_b"
+        );
+        assert_eq!(
+            trimprefix_filter("v1.2.3".to_string(), "v".to_string()),
+            "1.2.3"
+        );
+        assert_eq!(
+            trimsuffix_filter("app.exe".to_string(), ".exe".to_string()),
+            "app"
+        );
+        assert_eq!(title_filter("hello WORLD".to_string()), "Hello World");
+        assert_eq!(
+            split_filter("a,b,c".to_string(), ",".to_string()),
+            vec!["a", "b", "c"]
+        );
+        assert_eq!(
+            split_filter("keep".to_string(), "".to_string()),
+            vec!["keep"]
+        );
     }
 }
