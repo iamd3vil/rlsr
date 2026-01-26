@@ -1,0 +1,99 @@
+name: rlsr
+description: Install and run rlsr inside a GitHub Actions job.
+inputs:
+  config:
+    description: Path to rlsr config file.
+    required: false
+    default: rlsr.yml
+  publish:
+    description: Whether to publish release artifacts (false passes --skip-publish).
+    required: false
+    default: "false"
+  rm_dist:
+    description: Remove dist directory before building.
+    required: false
+    default: "false"
+  rlsr_version:
+    description: Version tag to install (e.g. v0.6.1) or 'latest'.
+    required: false
+    default: latest
+  args:
+    description: Extra args passed to rlsr (space-separated).
+    required: false
+    default: ""
+  working_directory:
+    description: Working directory to run rlsr in.
+    required: false
+    default: "."
+  github_token:
+    description: Token for GitHub API operations; falls back to GITHUB_TOKEN.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install rlsr
+      shell: bash
+      env:
+        RLSR_VERSION: ${{ inputs.rlsr_version }}
+      run: |
+        set -euo pipefail
+
+        os="$(uname -s)"
+        arch="$(uname -m)"
+
+        if [[ "$os" == "Linux" && "$arch" == "x86_64" ]]; then
+          suffix="linux-x86_64.zip"
+        elif [[ "$os" == "Darwin" && "$arch" == "arm64" ]]; then
+          suffix="macos-arm64.zip"
+        else
+          echo "Unsupported runner: ${os}/${arch}. Supported: Linux x86_64, macOS arm64."
+          exit 1
+        fi
+
+        if [[ "$RLSR_VERSION" == "latest" ]]; then
+          RLSR_VERSION="$(python -c 'import json,urllib.request; print(json.load(urllib.request.urlopen("https://api.github.com/repos/iamd3vil/rlsr/releases/latest"))["tag_name"])')"
+        fi
+
+        url="https://github.com/iamd3vil/rlsr/releases/download/${RLSR_VERSION}/rlsr-${RLSR_VERSION}-${suffix}"
+        tmp_dir="$(mktemp -d)"
+        curl -sSL -o "${tmp_dir}/rlsr.zip" "$url"
+        unzip -q "${tmp_dir}/rlsr.zip" -d "${tmp_dir}"
+        chmod +x "${tmp_dir}/rlsr"
+        mv "${tmp_dir}/rlsr" "${RUNNER_TEMP}/rlsr"
+        rm -rf "${tmp_dir}"
+        echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+    - name: Run rlsr
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        RLSR_CONFIG: ${{ inputs.config }}
+        RLSR_PUBLISH: ${{ inputs.publish }}
+        RLSR_RM_DIST: ${{ inputs.rm_dist }}
+        RLSR_ARGS: ${{ inputs.args }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+
+        if [[ -n "${INPUT_GITHUB_TOKEN:-}" ]]; then
+          export GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
+        fi
+
+        args=(--config "$RLSR_CONFIG")
+
+        if [[ "$RLSR_PUBLISH" == "true" ]]; then
+          :
+        else
+          args+=(--skip-publish)
+        fi
+
+        if [[ "$RLSR_RM_DIST" == "true" ]]; then
+          args+=(--rm-dist)
+        fi
+
+        if [[ -n "$RLSR_ARGS" ]]; then
+          read -r -a extra_args <<< "$RLSR_ARGS"
+          args+=("${extra_args[@]}")
+        fi
+
+        rlsr "${args[@]}"
