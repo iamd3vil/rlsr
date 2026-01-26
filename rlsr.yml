@@ -14,14 +14,17 @@ releases:
     builds:
       - command: "just build-linux"
         artifact: "target/x86_64-unknown-linux-musl/release/rlsr"
+        bin_name: "rlsr"
         archive_name: "rlsr-{{ meta.tag }}-linux-x86_64"
         name: "Linux build"
       - command: "just build-macos"
         artifact: "target/aarch64-apple-darwin/release/rlsr"
+        bin_name: "rlsr"
         archive_name: "rlsr-{{ meta.tag }}-macos-arm64"
         name: "MacOS build"
       - command: "just build-windows"
         artifact: "target/x86_64-pc-windows-gnu/release/rlsr.exe"
+        bin_name: "rlsr.exe"
         archive_name: "rlsr-{{ meta.tag }}-windows-x86_64"
         name: "Windows build"
 changelog:

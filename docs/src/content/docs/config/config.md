@@ -128,11 +128,29 @@ The `builds` section is an array that defines one or more build configurations. 
 - `arch`: (Optional) The target architecture label.
 - `arm`: (Optional) The ARM version label.
 - `target`: (Optional) The target triple.
+- `matrix`: (Optional) A build matrix that expands into multiple builds.
 - `no_archive`: If true, the artifact won't be archived.
 - `prehook`: (Optional) A script to run before this specific build.
 - `posthook`: (Optional) A script to run after this specific build.
 - `additional_files`: Build-specific additional files to include.
 - `env`: Environment variables specific to this build. These will be merged with the global environment variables defined in the `releases` section.
+
+## Build Matrix
+
+You can expand a single build into multiple builds by defining a `matrix` on the build. Each matrix entry is a map of keys to lists of values, and Rlsr generates the cartesian product of those values.
+
+Example:
+
+```yaml
+builds:
+  - name: "Go build"
+    matrix:
+      - os: ["linux", "darwin"]
+        arch: ["amd64", "arm64"]
+    command: "GOOS={{ meta.matrix.os }} GOARCH={{ meta.matrix.arch }} go build -o target/{{ meta.matrix.os }}/{{ meta.matrix.arch }}/app"
+    artifact: "target/{{ meta.matrix.os }}/{{ meta.matrix.arch }}/app"
+    archive_name: "app-{{ meta.matrix.os }}-{{ meta.matrix.arch }}"
+```
 
 ## Templating
 

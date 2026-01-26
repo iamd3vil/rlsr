@@ -2,6 +2,7 @@ use camino::Utf8Path;
 use color_eyre::eyre::{bail, Result};
 use config::FileFormat;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum HookType {
@@ -85,6 +86,7 @@ pub struct Build {
     pub arch: Option<String>,
     pub arm: Option<String>,
     pub target: Option<String>,
+    pub matrix: Option<Vec<BTreeMap<String, Vec<String>>>>,
 
     /// Environment variables to set for the build.
     pub env: Option<Vec<String>>,

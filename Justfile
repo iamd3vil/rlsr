@@ -41,7 +41,11 @@ build-macos $RUSTFLAGS="-C target-feature=+crt-static":
     fi
 
 build-windows $RUSTFLAGS="-C target-feature=+crt-static":
-    cross build --target x86_64-pc-windows-gnu --release
+    docker run --rm \
+    --volume ${PWD}:/io \
+    --workdir /io \
+    ghcr.io/rust-cross/cargo-zigbuild:latest \
+    sh -c 'rustup update stable && rustup target add x86_64-pc-windows-gnu && cargo zigbuild --release --target x86_64-pc-windows-gnu'
 
 docs-serve:
     cd docs && npm run dev && cd ../

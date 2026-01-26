@@ -26,6 +26,7 @@ Available fields:
 - `meta.short_commit`
 - `meta.is_snapshot`, `meta.is_prerelease`, `meta.is_dirty`
 - `meta.os`, `meta.arch`, `meta.arm`, `meta.target`
+- `meta.matrix` (map of matrix values, e.g. `meta.matrix.os`)
 - `env.VAR_NAME`
 - `date` (YYYY-MM-DD), `timestamp` (unix seconds), `now` (RFC 3339)
 

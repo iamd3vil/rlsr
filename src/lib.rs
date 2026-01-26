@@ -16,8 +16,9 @@ mod release_provider;
 mod templating;
 mod utils;
 
-use config::{Config, Release};
+use config::{Build, Config, Release};
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct Opts {
@@ -261,25 +262,30 @@ async fn run_builds_for_release(
 ) -> Result<()> {
     info!("Starting builds for release: '{}'", release.name);
 
+    let expanded_builds = expand_builds(&release.builds)?;
+
     if release.builds_sequential {
-        run_builds_sequentially(release, all_archives, template_meta).await
+        run_builds_sequentially(release, &expanded_builds, all_archives, template_meta).await
     } else {
-        run_builds_in_parallel(release, all_archives, template_meta).await
+        run_builds_in_parallel(release, &expanded_builds, all_archives, template_meta).await
     }
 }
 
 async fn run_builds_sequentially(
     release: &Release,
+    expanded_builds: &[ExpandedBuild],
     all_archives: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     let mut build_failures = Vec::new();
     let mut successful_builds = 0;
 
-    for (index, build_config) in release.builds.iter().enumerate() {
+    for (index, expanded_build) in expanded_builds.iter().enumerate() {
+        let build_config = &expanded_build.build;
         let build_name = &build_config.name;
         info!("Executing build: {}", build_name);
-        let result = build::run_build(release, build_config, &template_meta).await;
+        let result =
+            build::run_build(release, build_config, &template_meta, &expanded_build.matrix).await;
 
         match result {
             Ok(archive_path) => {
@@ -297,27 +303,34 @@ async fn run_builds_sequentially(
         }
     }
 
-    finalize_build_results(release, successful_builds, build_failures)
+    finalize_build_results(release, expanded_builds.len(), successful_builds, build_failures)
 }
 
 async fn run_builds_in_parallel(
     release: &Release,
+    expanded_builds: &[ExpandedBuild],
     all_archives: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     let mut build_handles = vec![];
 
-    for build_config in &release.builds {
+    for expanded_build in expanded_builds {
         let release_clone = release.clone();
-        let build_config_clone = build_config.clone();
+        let build_config_clone = expanded_build.build.clone();
         let all_archives_clone = all_archives.clone();
         let template_meta_clone = template_meta.clone();
+        let matrix_clone = expanded_build.matrix.clone();
 
         build_handles.push(tokio::spawn(async move {
             let build_name = &build_config_clone.name;
             info!("Executing build: {}", build_name);
-            let result =
-                build::run_build(&release_clone, &build_config_clone, &template_meta_clone).await;
+            let result = build::run_build(
+                &release_clone,
+                &build_config_clone,
+                &template_meta_clone,
+                &matrix_clone,
+            )
+            .await;
 
             match result {
                 Ok(archive_path) => {
@@ -361,11 +374,12 @@ async fn run_builds_in_parallel(
         }
     }
 
-    finalize_build_results(release, successful_builds, build_failures)
+    finalize_build_results(release, expanded_builds.len(), successful_builds, build_failures)
 }
 
 fn finalize_build_results(
     release: &Release,
+    total_builds: usize,
     successful_builds: usize,
     build_failures: Vec<color_eyre::Report>,
 ) -> Result<()> {
@@ -382,7 +396,7 @@ fn finalize_build_results(
             "{} out of {} builds failed for release '{}'. Failures:
 {}",
             build_failures.len(),
-            release.builds.len(),
+            total_builds,
             release.name,
             failure_details
         );
@@ -398,6 +412,85 @@ fn finalize_build_results(
         successful_builds, release.name
     );
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct ExpandedBuild {
+    build: Build,
+    matrix: BTreeMap<String, String>,
+}
+
+fn expand_builds(builds: &[Build]) -> Result<Vec<ExpandedBuild>> {
+    let mut expanded = Vec::new();
+
+    for build in builds {
+        if let Some(matrix_groups) = &build.matrix {
+            if matrix_groups.is_empty() {
+                bail!("matrix for build '{}' must define at least one entry", build.name);
+            }
+
+            for group in matrix_groups {
+                let combinations = expand_matrix_group(group, &build.name)?;
+                for matrix_values in combinations {
+                    let mut build_clone = build.clone();
+                    build_clone.matrix = None;
+                    apply_matrix_to_build(&mut build_clone, &matrix_values);
+                    expanded.push(ExpandedBuild {
+                        build: build_clone,
+                        matrix: matrix_values,
+                    });
+                }
+            }
+        } else {
+            expanded.push(ExpandedBuild {
+                build: build.clone(),
+                matrix: BTreeMap::new(),
+            });
+        }
+    }
+
+    Ok(expanded)
+}
+
+fn expand_matrix_group(
+    group: &BTreeMap<String, Vec<String>>,
+    build_name: &str,
+) -> Result<Vec<BTreeMap<String, String>>> {
+    let mut combinations = vec![BTreeMap::new()];
+
+    for (key, values) in group {
+        if values.is_empty() {
+            bail!(
+                "matrix field '{}' for build '{}' must include at least one value",
+                key,
+                build_name
+            );
+        }
+
+        let mut next = Vec::new();
+        for existing in &combinations {
+            for value in values {
+                let mut updated = existing.clone();
+                updated.insert(key.clone(), value.clone());
+                next.push(updated);
+            }
+        }
+        combinations = next;
+    }
+
+    Ok(combinations)
+}
+
+fn apply_matrix_to_build(build: &mut Build, matrix: &BTreeMap<String, String>) {
+    for (key, value) in matrix {
+        match key.as_str() {
+            "os" => build.os = Some(value.clone()),
+            "arch" => build.arch = Some(value.clone()),
+            "arm" => build.arm = Some(value.clone()),
+            "target" => build.target = Some(value.clone()),
+            _ => {}
+        }
+    }
 }
 
 /// Creates checksums if configured for the release.

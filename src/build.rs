@@ -6,6 +6,7 @@ use color_eyre::{
 };
 use log::{debug, info};
 use serde::Serialize;
+use std::collections::BTreeMap;
 use tokio::fs;
 
 use crate::{
@@ -35,6 +36,7 @@ pub struct BuildMeta {
     pub arch: String,
     pub arm: String,
     pub target: String,
+    pub matrix: BTreeMap<String, String>,
 }
 
 impl crate::templating::TemplateContext for BuildMeta {
@@ -55,8 +57,13 @@ impl crate::templating::TemplateContext for BuildMeta {
     }
 }
 
-pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) -> Result<String> {
-    let build_meta = create_build_meta(build, meta);
+pub async fn run_build(
+    release: &Release,
+    build: &Build,
+    meta: &TemplateMeta,
+    matrix: &BTreeMap<String, String>,
+) -> Result<String> {
+    let build_meta = create_build_meta(build, meta, matrix);
 
     // Execute prehook if present
     execute_prehook(release, build, &build_meta).await?;
@@ -76,7 +83,11 @@ pub async fn run_build(release: &Release, build: &Build, meta: &TemplateMeta) ->
     process_artifacts(release, build, &build_meta).await
 }
 
-fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
+fn create_build_meta(
+    build: &Build,
+    meta: &TemplateMeta,
+    matrix: &BTreeMap<String, String>,
+) -> BuildMeta {
     BuildMeta {
         build_name: build.name.clone(),
         tag: meta.tag.clone(),
@@ -97,6 +108,7 @@ fn create_build_meta(build: &Build, meta: &TemplateMeta) -> BuildMeta {
         arch: build.arch.clone().unwrap_or_default(),
         arm: build.arm.clone().unwrap_or_default(),
         target: build.target.clone().unwrap_or_default(),
+        matrix: matrix.clone(),
     }
 }
 
@@ -347,6 +359,7 @@ mod tests {
             arch: None,
             arm: None,
             target: None,
+            matrix: None,
             env: None,
             prehook: None,
             posthook: None,
@@ -364,7 +377,8 @@ mod tests {
         build.target = Some("x86_64-unknown-linux-musl".to_string());
 
         let meta = test_template_meta();
-        let build_meta = create_build_meta(&build, &meta);
+        let matrix = BTreeMap::new();
+        let build_meta = create_build_meta(&build, &meta, &matrix);
 
         assert_eq!(build_meta.build_name, build.name);
         assert_eq!(build_meta.tag, meta.tag);
@@ -391,7 +405,8 @@ mod tests {
     fn test_create_build_meta_defaults_empty_strings_for_missing_target_fields() {
         let build = base_build();
         let meta = test_template_meta();
-        let build_meta = create_build_meta(&build, &meta);
+        let matrix = BTreeMap::new();
+        let build_meta = create_build_meta(&build, &meta, &matrix);
 
         assert!(build_meta.os.is_empty());
         assert!(build_meta.arch.is_empty());
@@ -412,7 +427,8 @@ mod tests {
         build.target = Some("x86_64-unknown-linux-musl".to_string());
 
         let meta = test_template_meta();
-        let build_meta = create_build_meta(&build, &meta);
+        let matrix = BTreeMap::new();
+        let build_meta = create_build_meta(&build, &meta, &matrix);
         let envs = collect_envs(&release, &build, &build_meta).unwrap();
 
         assert_eq!(
@@ -435,7 +451,8 @@ mod tests {
         build.os = Some("linux".to_string());
 
         let meta = test_template_meta();
-        let build_meta = create_build_meta(&build, &meta);
+        let matrix = BTreeMap::new();
+        let build_meta = create_build_meta(&build, &meta, &matrix);
         let files =
             prepare_archive_files(&release, &build, "target/bin/app", "dist/app", &build_meta)
                 .await
