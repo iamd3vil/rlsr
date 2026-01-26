@@ -11,6 +11,7 @@ export default defineConfig({
       },
       sidebar: [
         "installation",
+        "github-actions",
         {
           label: "Configuration",
           items: [
