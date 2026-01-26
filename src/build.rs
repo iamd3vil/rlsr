@@ -330,6 +330,7 @@ mod tests {
             },
             checksum: None,
             env: None,
+            builds_sequential: false,
             additional_files: None,
             hooks: None,
         }

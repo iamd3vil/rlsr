@@ -2,6 +2,7 @@ releases:
   - name: "Release to github"
     # The dist folder where the builds will be stored.
     dist_folder: "./dist"
+    builds_sequential: false
     # The targets where the builds will be released.
     targets:
       github:

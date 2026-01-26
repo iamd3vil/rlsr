@@ -253,17 +253,62 @@ async fn execute_hooks(
     Ok(())
 }
 
-/// Runs all builds for a given release configuration in parallel.
+/// Runs all builds for a given release configuration.
 async fn run_builds_for_release(
+    release: &Release,
+    all_archives: Arc<Mutex<Vec<String>>>,
+    template_meta: Arc<TemplateMeta>,
+) -> Result<()> {
+    info!("Starting builds for release: '{}'", release.name);
+
+    if release.builds_sequential {
+        run_builds_sequentially(release, all_archives, template_meta).await
+    } else {
+        run_builds_in_parallel(release, all_archives, template_meta).await
+    }
+}
+
+async fn run_builds_sequentially(
+    release: &Release,
+    all_archives: Arc<Mutex<Vec<String>>>,
+    template_meta: Arc<TemplateMeta>,
+) -> Result<()> {
+    let mut build_failures = Vec::new();
+    let mut successful_builds = 0;
+
+    for (index, build_config) in release.builds.iter().enumerate() {
+        let build_name = &build_config.name;
+        info!("Executing build: {}", build_name);
+        let result = build::run_build(release, build_config, &template_meta).await;
+
+        match result {
+            Ok(archive_path) => {
+                debug!(
+                    "Build '{}' successful, archive: {}",
+                    build_name, archive_path
+                );
+                all_archives.lock().await.push(archive_path.clone());
+                successful_builds += 1;
+            }
+            Err(e) => {
+                error!("Build '{}' failed: {:?}", build_name, e);
+                build_failures.push(e.wrap_err(format!("Build #{} failed", index)));
+            }
+        }
+    }
+
+    finalize_build_results(release, successful_builds, build_failures)
+}
+
+async fn run_builds_in_parallel(
     release: &Release,
     all_archives: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     let mut build_handles = vec![];
 
-    info!("Starting builds for release: '{}'", release.name);
     for build_config in &release.builds {
-        let release_clone = release.clone(); // Clone necessary data for the task
+        let release_clone = release.clone();
         let build_config_clone = build_config.clone();
         let all_archives_clone = all_archives.clone();
         let template_meta_clone = template_meta.clone();
@@ -281,40 +326,31 @@ async fn run_builds_for_release(
                         build_name, archive_path
                     );
                     all_archives_clone.lock().await.push(archive_path.clone());
-                    Ok(archive_path) // Return success value
+                    Ok(archive_path)
                 }
                 Err(e) => {
-                    error!("Build '{}' failed: {:?}", build_name, e); // Use debug format for error
-                                                                      // We return the error wrapped in Ok, so join_all doesn't panic immediately
+                    error!("Build '{}' failed: {:?}", build_name, e);
                     Err(e.wrap_err(format!("Build '{}' execution failed", build_name)))
                 }
             }
         }));
     }
 
-    // Wait for all builds to complete and collect results
     let build_results = futures::future::join_all(build_handles).await;
 
     let mut build_failures = Vec::new();
     let mut successful_builds = 0;
 
-    // Process results, separating successes and failures
     for (index, join_result) in build_results.into_iter().enumerate() {
         match join_result {
-            Ok(task_result) => {
-                // Task completed without panic
-                match task_result {
-                    Ok(_) => successful_builds += 1, // Build function returned Ok
-                    Err(build_err) => {
-                        // Build function returned Err
-                        error!("Build #{} failed: {:?}", index, build_err); // Use debug format
-                                                                            // Use wrap_err for existing eyre::Error
-                        build_failures.push(build_err.wrap_err(format!("Build #{} failed", index)));
-                    }
+            Ok(task_result) => match task_result {
+                Ok(_) => successful_builds += 1,
+                Err(build_err) => {
+                    error!("Build #{} failed: {:?}", index, build_err);
+                    build_failures.push(build_err.wrap_err(format!("Build #{} failed", index)));
                 }
-            }
+            },
             Err(join_err) => {
-                // Task panicked
                 error!("Build task #{} panicked: {}", index, join_err);
                 build_failures.push(color_eyre::eyre::eyre!(
                     "Build task #{} panicked: {}",
@@ -325,10 +361,18 @@ async fn run_builds_for_release(
         }
     }
 
+    finalize_build_results(release, successful_builds, build_failures)
+}
+
+fn finalize_build_results(
+    release: &Release,
+    successful_builds: usize,
+    build_failures: Vec<color_eyre::Report>,
+) -> Result<()> {
     if !build_failures.is_empty() {
         let failure_details = build_failures
             .iter()
-            .map(|e| format!("  - {:?}", e)) // Use debug format
+            .map(|e| format!("  - {:?}", e))
             .collect::<Vec<_>>()
             .join(
                 "
@@ -342,7 +386,6 @@ async fn run_builds_for_release(
             release.name,
             failure_details
         );
-        // Aggregate errors into a single error message
         bail!(
             "Build process aborted due to {} failures in release '{}'. See logs for details.",
             build_failures.len(),

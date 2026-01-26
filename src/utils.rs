@@ -1,10 +1,12 @@
 use camino::Utf8Path;
+use chrono::{DateTime as ChronoDateTime, Datelike, Timelike, Utc};
 use color_eyre::eyre::{bail, Context, Result};
 use log::debug;
 use std::cmp::Ord;
 use std::process::Output;
 use std::{env, fs, io};
 use tokio::{process::Command, task};
+use zip::DateTime;
 
 use crate::changelog_formatter;
 use crate::config::{Changelog, Release};
@@ -445,9 +447,26 @@ pub async fn archive_files(
         let mut zip = zip::ZipWriter::new(zip_file);
         for file in filenames {
             let mut f = fs::File::open(&file.disk_path)?;
+            let mod_time = f.metadata().ok().and_then(|meta| meta.modified().ok());
+            let zip_time = mod_time
+                .and_then(|mod_time| {
+                    let dt: ChronoDateTime<Utc> = mod_time.into();
+                    let year = u16::try_from(dt.year()).ok()?;
+                    DateTime::from_date_and_time(
+                        year,
+                        dt.month() as u8,
+                        dt.day() as u8,
+                        dt.hour() as u8,
+                        dt.minute() as u8,
+                        dt.second() as u8,
+                    )
+                    .ok()
+                })
+                .unwrap_or_else(DateTime::default_for_write);
 
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
+                .last_modified_time(zip_time)
                 .unix_permissions(0o744);
             zip.start_file(file.archive_filename, options)?;
             io::copy(&mut f, &mut zip)?;

@@ -23,6 +23,7 @@ Here's a sample configuration in YAML format:
 releases:
   - name: "Release to github"
     dist_folder: "./dist"
+    builds_sequential: false
     targets:
       github:
         owner: "iamd3vil"
@@ -79,6 +80,7 @@ The `releases` section is an array that can contain one or more release configur
 
 - `name`: A descriptive name for the release process.
 - `dist_folder`: The directory where built artifacts will be stored.
+- `builds_sequential`: (Optional) Run builds sequentially instead of in parallel.
 
 ### Targets
 

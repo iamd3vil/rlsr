@@ -46,6 +46,9 @@ pub struct Release {
     pub checksum: Option<Checksum>,
     pub env: Option<Vec<String>>,
 
+    #[serde(default)]
+    pub builds_sequential: bool,
+
     // Additonal files to be included in the archive.
     pub additional_files: Option<Vec<String>>,
 
