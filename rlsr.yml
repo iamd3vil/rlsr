@@ -32,4 +32,3 @@ changelog:
   template: "changelog.tpl"
   exclude:
     - "^doc:"
-    - "^chore:"
