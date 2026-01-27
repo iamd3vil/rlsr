@@ -1,16 +1,18 @@
 use crate::TemplateMeta;
 use camino::Utf8Path;
 use color_eyre::{
-    eyre::{bail, Context, ContextCompat},
+    eyre::{bail, eyre, Context, ContextCompat},
     Result,
 };
 use log::{debug, info};
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::process::Output;
 use tokio::fs;
 
 use crate::{
-    config::{Build, Release},
+    buildx::{build_buildx_command, ensure_buildx_builder},
+    config::{Build, BuildType, Release},
     templating,
     utils::{self, archive_files, ArchiveFile},
 };
@@ -57,30 +59,51 @@ impl crate::templating::TemplateContext for BuildMeta {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BuildResult {
+    // Archive path is optional for buildx builds that only publish images.
+    pub archive_path: Option<String>,
+    // Image tags produced by buildx, used later during publish.
+    pub image_tags: Vec<String>,
+}
+
 pub async fn run_build(
     release: &Release,
     build: &Build,
     meta: &TemplateMeta,
     matrix: &BTreeMap<String, String>,
-) -> Result<String> {
+) -> Result<BuildResult> {
     let build_meta = create_build_meta(build, meta, matrix);
 
     // Execute prehook if present
     execute_prehook(release, build, &build_meta).await?;
 
     // Execute main build command
-    let output = execute_build_command(release, build, &build_meta).await?;
+    let command_result = execute_build_command(release, build, &build_meta).await?;
 
     // Check if build was successful.
-    if !output.status.success() {
+    if !command_result.output.status.success() {
         bail!("build failed: {}", build.name);
     }
 
     // Execute posthook if present
     execute_posthook(release, build, &build_meta).await?;
 
-    // Copy artifact and create archive if needed
-    process_artifacts(release, build, &build_meta).await
+    // Copy artifact and create archive if needed.
+    let archive_path = if build.artifact.trim().is_empty() {
+        debug!(
+            "build '{}' has no artifact configured; skipping archive generation",
+            build.name
+        );
+        None
+    } else {
+        Some(process_artifacts(release, build, &build_meta).await?)
+    };
+
+    Ok(BuildResult {
+        archive_path,
+        image_tags: command_result.image_tags,
+    })
 }
 
 fn create_build_meta(
@@ -143,19 +166,51 @@ async fn execute_prehook(release: &Release, build: &Build, build_meta: &BuildMet
     Ok(())
 }
 
+#[derive(Debug)]
+struct BuildCommandResult {
+    output: Output,
+    image_tags: Vec<String>,
+}
+
 async fn execute_build_command(
     release: &Release,
     build: &Build,
     build_meta: &BuildMeta,
-) -> Result<std::process::Output> {
-    debug!("executing command: {}", build.command);
-
+) -> Result<BuildCommandResult> {
     let envs = collect_envs(release, build, build_meta);
 
     debug!("envs: {:?}", envs);
 
-    let cmd = templating::render_template(&build.command, build_meta);
-    utils::execute_command(&cmd, &envs).await
+    match build.build_type {
+        BuildType::Custom => {
+            let command = build.command.as_ref().ok_or_else(|| {
+                eyre!("missing build command for build '{}'", build.name)
+            })?;
+            let cmd = templating::render_template(command, build_meta);
+            debug!("executing command: {}", cmd);
+            let output = utils::execute_command(&cmd, &envs).await?;
+            Ok(BuildCommandResult {
+                output,
+                image_tags: Vec::new(),
+            })
+        }
+        BuildType::Buildx => {
+            let buildx_command = build_buildx_command(build, build_meta)?;
+            if let Some(builder) = buildx_command.builder.as_deref() {
+                ensure_buildx_builder(build, builder, &envs).await?;
+            }
+            debug!("executing command: {}", buildx_command.command);
+            if !buildx_command.tags.is_empty() {
+                debug!("buildx tags: {:?}", buildx_command.tags);
+            }
+            let output = utils::execute_command(&buildx_command.command, &envs).await?;
+            // Preserve rendered tags so publish targets can push buildx images.
+            Ok(BuildCommandResult {
+                output,
+                image_tags: buildx_command.tags,
+            })
+        }
+    }
 }
 
 async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMeta) -> Result<()> {
@@ -302,8 +357,9 @@ async fn copy_artifact_with_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ReleaseTargets;
+    use crate::config::{BuildType, ReleaseTargets};
     use crate::TemplateMeta;
+    use std::collections::BTreeMap;
 
     fn test_template_meta() -> TemplateMeta {
         let mut env = std::collections::HashMap::new();
@@ -350,7 +406,9 @@ mod tests {
 
     fn base_build() -> Build {
         Build {
-            command: "echo build".to_string(),
+            build_type: BuildType::Custom,
+            command: Some("echo build".to_string()),
+            buildx: None,
             artifact: "./bin/rlsr".to_string(),
             bin_name: None,
             archive_name: "rlsr.tar.gz".to_string(),

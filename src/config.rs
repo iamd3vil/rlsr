@@ -27,9 +27,21 @@ pub struct Github {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Docker {
-    pub dockerfile: String,
-    pub image: String,
-    pub context: String,
+    pub dockerfile: Option<String>,
+    pub image: Option<String>,
+    pub context: Option<String>,
+
+    // Optional list of image references to push without running a docker build.
+    #[serde(default)]
+    pub images: Option<Vec<String>>,
+
+    // Controls whether the Docker target performs docker push for handled images.
+    #[serde(default = "default_true")]
+    pub push: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -75,9 +87,45 @@ pub struct Changelog {
     pub template: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum BuildType {
+    #[serde(rename = "custom")]
+    #[default]
+    Custom,
+    #[serde(rename = "buildx")]
+    Buildx,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct BuildxConfig {
+    pub context: Option<String>,
+    pub dockerfile: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub platforms: Option<Vec<String>>,
+    pub builder: Option<String>,
+    pub load: Option<bool>,
+    pub build_args: Option<BTreeMap<String, String>>,
+    pub labels: Option<BTreeMap<String, String>>,
+    pub cache_from: Option<Vec<String>>,
+    pub cache_to: Option<Vec<String>>,
+    pub target: Option<String>,
+    pub outputs: Option<Vec<String>>,
+    pub provenance: Option<bool>,
+    pub sbom: Option<bool>,
+    pub secrets: Option<Vec<String>>,
+    pub ssh: Option<Vec<String>>,
+    pub annotations: Option<BTreeMap<String, String>>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Build {
-    pub command: String,
+    #[serde(rename = "type", default)]
+    pub build_type: BuildType,
+
+    #[serde(default)]
+    pub command: Option<String>,
+
+    pub buildx: Option<BuildxConfig>,
     pub artifact: String,
     pub bin_name: Option<String>,
     pub archive_name: String,
@@ -182,10 +230,114 @@ releases:
             builds[0].target.as_deref(),
             Some("x86_64-unknown-linux-musl")
         );
+        assert_eq!(builds[0].build_type, BuildType::Custom);
+        assert_eq!(builds[0].command.as_deref(), Some("echo build"));
 
         assert!(builds[1].os.is_none());
         assert!(builds[1].arch.is_none());
         assert!(builds[1].arm.is_none());
         assert!(builds[1].target.is_none());
+        assert_eq!(builds[1].build_type, BuildType::Custom);
+        assert_eq!(builds[1].command.as_deref(), Some("echo build2"));
+    }
+
+    #[test]
+    fn test_buildx_type_deserialize() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+    builds:
+      - type: "buildx"
+        artifact: "./bin/app"
+        archive_name: "app"
+        name: "Buildx build"
+        buildx:
+          context: "."
+          dockerfile: "./Dockerfile"
+          tags:
+            - "example:latest"
+          platforms:
+            - "linux/amd64"
+          builder: "default"
+          load: true
+          build_args:
+            FOO: "bar"
+          labels:
+            org.opencontainers.image.title: "rlsr"
+          cache_from:
+            - "type=registry,ref=example:cache"
+          cache_to:
+            - "type=inline"
+          target: "release"
+          outputs:
+            - "type=registry"
+          provenance: true
+          sbom: true
+          secrets:
+            - "id=token,src=./token"
+          ssh:
+            - "default"
+          annotations:
+            org.opencontainers.image.description: "desc"
+"#;
+
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let build = &cfg.releases[0].builds[0];
+
+        assert_eq!(build.build_type, BuildType::Buildx);
+        assert!(build.command.is_none());
+        let buildx = build.buildx.as_ref().expect("buildx config should exist");
+        assert_eq!(buildx.context.as_deref(), Some("."));
+        assert_eq!(buildx.dockerfile.as_deref(), Some("./Dockerfile"));
+        assert_eq!(
+            buildx.tags.as_deref(),
+            Some(&["example:latest".to_string()][..])
+        );
+        assert_eq!(
+            buildx.platforms.as_deref(),
+            Some(&["linux/amd64".to_string()][..])
+        );
+        assert_eq!(buildx.builder.as_deref(), Some("default"));
+        assert_eq!(buildx.load, Some(true));
+        assert_eq!(
+            buildx.build_args.as_ref().and_then(|args| args.get("FOO").cloned()),
+            Some("bar".to_string())
+        );
+        assert_eq!(
+            buildx.labels.as_ref().and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
+            Some("rlsr".to_string())
+        );
+        assert_eq!(
+            buildx.cache_from.as_deref(),
+            Some(&["type=registry,ref=example:cache".to_string()][..])
+        );
+        assert_eq!(
+            buildx.cache_to.as_deref(),
+            Some(&["type=inline".to_string()][..])
+        );
+        assert_eq!(buildx.target.as_deref(), Some("release"));
+        assert_eq!(
+            buildx.outputs.as_deref(),
+            Some(&["type=registry".to_string()][..])
+        );
+        assert_eq!(buildx.provenance, Some(true));
+        assert_eq!(buildx.sbom, Some(true));
+        assert_eq!(
+            buildx.secrets.as_deref(),
+            Some(&["id=token,src=./token".to_string()][..])
+        );
+        assert_eq!(
+            buildx.ssh.as_deref(),
+            Some(&["default".to_string()][..])
+        );
+        assert_eq!(
+            buildx.annotations.as_ref().and_then(|annotations| annotations.get("org.opencontainers.image.description").cloned()),
+            Some("desc".to_string())
+        );
     }
 }

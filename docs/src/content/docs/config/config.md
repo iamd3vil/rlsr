@@ -63,6 +63,8 @@ changelog:
     - "^doc:"
 ```
 
+See [Project Examples](/examples/) for full Rust and Go configurations (including build matrices and Buildx).
+
 ## Configuration Structure
 
 The configuration file consists of two main sections:
@@ -120,14 +122,16 @@ Specify commands to run at certain points in the release process:
 
 The `builds` section is an array that defines one or more build configurations. Each build configuration can include:
 
-- `command`: The command to execute for building.
+- `type`: (Optional) Build type. Defaults to `custom`. Use `buildx` for Docker Buildx builds.
+- `command`: The command to execute for building (required for `custom` builds).
+- `buildx`: (Optional) Buildx configuration when `type` is `buildx`.
 - `bin_name`: (Optional) The name of the binary produced.
 - `artifact`: The path to the built artifact.
 - `archive_name`: The name of the archive containing the artifact.
 - `os`: (Optional) The target operating system label.
 - `arch`: (Optional) The target architecture label.
 - `arm`: (Optional) The ARM version label.
-- `target`: (Optional) The target triple.
+- `target`: (Optional) The target triple (or Buildx target when using `type: "buildx"`).
 - `matrix`: (Optional) A build matrix that expands into multiple builds.
 - `no_archive`: If true, the artifact won't be archived.
 - `prehook`: (Optional) A script to run before this specific build.
@@ -135,9 +139,41 @@ The `builds` section is an array that defines one or more build configurations. 
 - `additional_files`: Build-specific additional files to include.
 - `env`: Environment variables specific to this build. These will be merged with the global environment variables defined in the `releases` section.
 
+## Build Types
+
+### Custom (default)
+
+Use `type: "custom"` (or omit `type`) to run a shell command. This build type uses the `command` field to produce the artifact.
+
+### Buildx
+
+Use `type: "buildx"` to build Docker images with Buildx. Configure it with the `buildx` block and keep `artifact`/`archive_name` so Rlsr can copy or archive the output. A common pattern is to use `buildx.outputs` with `type=tar` or `type=local` to generate a file or directory that matches the `artifact` path. If you set `buildx.outputs` to `type=registry`, Buildx pushes the multi-arch image during the build step (no local artifact is produced).
+
+Supported `buildx` keys:
+
+- `context`: Build context path.
+- `dockerfile`: Dockerfile path.
+- `tags`: Image tags to apply.
+- `platforms`: Build platforms (for example, `linux/amd64`).
+- `builder`: Named Buildx builder to use.
+- `load`: Load the image into the local Docker daemon.
+- `build_args`: Map of build arguments.
+- `labels`: Map of image labels.
+- `cache_from`: Cache sources.
+- `cache_to`: Cache destinations.
+- `target`: Target stage to build.
+- `outputs`: Output specs (such as `type=tar`).
+- `provenance`: Enable or disable provenance.
+- `sbom`: Enable or disable SBOM generation.
+- `secrets`: Build secrets.
+- `ssh`: SSH agent forward specs.
+- `annotations`: Map of image annotations.
+
 ## Build Matrix
 
 You can expand a single build into multiple builds by defining a `matrix` on the build. Each matrix entry is a map of keys to lists of values, and Rlsr generates the cartesian product of those values.
+
+Matrix entries can also target Buildx fields. For `type: "buildx"`, `target` updates the Buildx stage. Supported Buildx matrix keys include `platforms`, `tags`, `cache_from`, `cache_to`, `outputs`, `secrets`, `ssh`, `annotations` (use `key=value`), `builder`, `context`, `dockerfile`, `load`, `provenance`, and `sbom`. For maps, use `build_args.KEY`, `labels.KEY`, or `annotations.KEY` entries.
 
 Example:
 
@@ -167,7 +203,7 @@ Templating can be used in the following configuration fields:
 - Build fields: `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
 - Build env values: `env`
 - Additional files: release and build `additional_files`
-- Docker image: `targets.docker.image`
+- Docker image: `targets.docker.image`, `targets.docker.images`
 
 ### Example Usage
 

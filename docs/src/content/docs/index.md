@@ -31,6 +31,10 @@ If `--skip-publish` flag is given, `rlsr` will skip publishing. `rm-dist` flag c
 
 [Configuration](/config/config/) can be found here.
 
+## Project Examples
+
+[Project Examples](/examples/) includes full Rust and Go `rlsr.yml` samples.
+
 ## Templating
 
 [Templating](/templating/) documents available template variables and filters.

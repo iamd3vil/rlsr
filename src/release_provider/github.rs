@@ -18,6 +18,7 @@ impl ReleaseProvider for Github {
         &self,
         release: &Release,
         all_archives: Vec<String>,
+        _image_tags: Vec<String>,
         latest_tag: String,
     ) -> Result<()> {
         self.publish_build(release, all_archives, self.ghtoken.clone(), latest_tag)

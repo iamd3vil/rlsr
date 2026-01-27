@@ -13,8 +13,10 @@ Templating is supported in:
 - Build fields: `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
 - Build env values: `env`
 - Additional files: release and build `additional_files`
-- Docker target image: `targets.docker.image`
+- Docker target images: `targets.docker.image`, `targets.docker.images`
 - Changelog templates: `changelog.template`
+
+Buildx tags (`builds[].buildx.tags`) are rendered with build metadata and reused for Docker publishing when no explicit Docker images are configured. The `targets.docker.push` flag is a boolean toggle and does not support templating.
 
 ## Build Templates (BuildMeta)
 

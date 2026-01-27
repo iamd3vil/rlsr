@@ -45,6 +45,34 @@ releases:
           - "README.md"
           - "LICENSE"
 
+      - name: "Docker buildx image"
+        type: "buildx"
+        artifact: "./target/buildx/rlsr-image.tar"
+        archive_name: "rlsr-image-{{ meta.tag }}.tar"
+        no_archive: true
+        buildx:
+          context: "."
+          dockerfile: "./Dockerfile"
+          builder: "rlsr-builder"
+          platforms:
+            - "linux/amd64"
+            - "linux/arm64"
+          tags:
+            - "localhost:5000/rlsr:{{ meta.tag }}"
+          outputs:
+            - "type=tar,dest=./target/buildx/rlsr-image.tar"
+          cache_from:
+            - "type=registry,ref=localhost:5000/rlsr:buildcache"
+          cache_to:
+            - "type=inline"
+          build_args:
+            RUST_VERSION: "{{ meta.version }}"
+          labels:
+            org.opencontainers.image.title: "rlsr"
+          target: "release"
+          provenance: true
+          sbom: false
+
 # The changelog will be generated from the git log.
 changelog:
   format: "github"

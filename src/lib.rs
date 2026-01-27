@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::{fs, sync::Mutex};
 
 mod build;
+mod buildx;
 mod changelog_formatter;
 mod checksum;
 mod checksummer;
@@ -16,7 +17,7 @@ mod release_provider;
 mod templating;
 mod utils;
 
-use config::{Build, Config, Release};
+use config::{Build, BuildType, BuildxConfig, Config, Release};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -258,6 +259,7 @@ async fn execute_hooks(
 async fn run_builds_for_release(
     release: &Release,
     all_archives: Arc<Mutex<Vec<String>>>,
+    all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     info!("Starting builds for release: '{}'", release.name);
@@ -265,9 +267,23 @@ async fn run_builds_for_release(
     let expanded_builds = expand_builds(&release.builds)?;
 
     if release.builds_sequential {
-        run_builds_sequentially(release, &expanded_builds, all_archives, template_meta).await
+        run_builds_sequentially(
+            release,
+            &expanded_builds,
+            all_archives,
+            all_image_tags,
+            template_meta,
+        )
+        .await
     } else {
-        run_builds_in_parallel(release, &expanded_builds, all_archives, template_meta).await
+        run_builds_in_parallel(
+            release,
+            &expanded_builds,
+            all_archives,
+            all_image_tags,
+            template_meta,
+        )
+        .await
     }
 }
 
@@ -275,6 +291,7 @@ async fn run_builds_sequentially(
     release: &Release,
     expanded_builds: &[ExpandedBuild],
     all_archives: Arc<Mutex<Vec<String>>>,
+    all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     let mut build_failures = Vec::new();
@@ -288,12 +305,23 @@ async fn run_builds_sequentially(
             build::run_build(release, build_config, &template_meta, &expanded_build.matrix).await;
 
         match result {
-            Ok(archive_path) => {
-                debug!(
-                    "Build '{}' successful, archive: {}",
-                    build_name, archive_path
-                );
-                all_archives.lock().await.push(archive_path.clone());
+            Ok(build_result) => {
+                if let Some(archive_path) = build_result.archive_path.as_ref() {
+                    debug!(
+                        "Build '{}' successful, archive: {}",
+                        build_name, archive_path
+                    );
+                    all_archives.lock().await.push(archive_path.clone());
+                } else {
+                    debug!("Build '{}' successful with no archive", build_name);
+                }
+                if !build_result.image_tags.is_empty() {
+                    // Aggregate buildx tags for later publish steps.
+                    all_image_tags
+                        .lock()
+                        .await
+                        .extend(build_result.image_tags);
+                }
                 successful_builds += 1;
             }
             Err(e) => {
@@ -310,6 +338,7 @@ async fn run_builds_in_parallel(
     release: &Release,
     expanded_builds: &[ExpandedBuild],
     all_archives: Arc<Mutex<Vec<String>>>,
+    all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
 ) -> Result<()> {
     let mut build_handles = vec![];
@@ -318,6 +347,7 @@ async fn run_builds_in_parallel(
         let release_clone = release.clone();
         let build_config_clone = expanded_build.build.clone();
         let all_archives_clone = all_archives.clone();
+        let all_image_tags_clone = all_image_tags.clone();
         let template_meta_clone = template_meta.clone();
         let matrix_clone = expanded_build.matrix.clone();
 
@@ -333,13 +363,24 @@ async fn run_builds_in_parallel(
             .await;
 
             match result {
-                Ok(archive_path) => {
-                    debug!(
-                        "Build '{}' successful, archive: {}",
-                        build_name, archive_path
-                    );
-                    all_archives_clone.lock().await.push(archive_path.clone());
-                    Ok(archive_path)
+                Ok(build_result) => {
+                    if let Some(archive_path) = build_result.archive_path.as_ref() {
+                        debug!(
+                            "Build '{}' successful, archive: {}",
+                            build_name, archive_path
+                        );
+                        all_archives_clone.lock().await.push(archive_path.clone());
+                    } else {
+                        debug!("Build '{}' successful with no archive", build_name);
+                    }
+                    if !build_result.image_tags.is_empty() {
+                        // Aggregate buildx tags for later publish steps.
+                        all_image_tags_clone
+                            .lock()
+                            .await
+                            .extend(build_result.image_tags);
+                    }
+                    Ok(())
                 }
                 Err(e) => {
                     error!("Build '{}' failed: {:?}", build_name, e);
@@ -481,14 +522,120 @@ fn expand_matrix_group(
     Ok(combinations)
 }
 
+fn ensure_buildx_config(build: &mut Build) -> &mut BuildxConfig {
+    if build.buildx.is_none() {
+        build.buildx = Some(BuildxConfig::default());
+    }
+    build
+        .buildx
+        .as_mut()
+        .expect("buildx config should be initialized")
+}
+
+fn parse_bool_value(value: &str) -> Option<bool> {
+    value.parse::<bool>().ok()
+}
+
 fn apply_matrix_to_build(build: &mut Build, matrix: &BTreeMap<String, String>) {
     for (key, value) in matrix {
         match key.as_str() {
             "os" => build.os = Some(value.clone()),
             "arch" => build.arch = Some(value.clone()),
             "arm" => build.arm = Some(value.clone()),
-            "target" => build.target = Some(value.clone()),
-            _ => {}
+            "target" => {
+                // For buildx builds, map target to the Dockerfile stage.
+                if build.build_type == BuildType::Buildx {
+                    let buildx = ensure_buildx_config(build);
+                    buildx.target = Some(value.clone());
+                } else {
+                    build.target = Some(value.clone());
+                }
+            }
+            "platforms" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.platforms = Some(vec![value.clone()]);
+            }
+            "tags" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.tags = Some(vec![value.clone()]);
+            }
+            "cache_from" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.cache_from = Some(vec![value.clone()]);
+            }
+            "cache_to" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.cache_to = Some(vec![value.clone()]);
+            }
+            "outputs" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.outputs = Some(vec![value.clone()]);
+            }
+            "secrets" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.secrets = Some(vec![value.clone()]);
+            }
+            "ssh" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.ssh = Some(vec![value.clone()]);
+            }
+            "annotations" => {
+                if let Some((annotation_key, annotation_value)) = value.split_once('=') {
+                    let buildx = ensure_buildx_config(build);
+                    let annotations = buildx.annotations.get_or_insert_with(BTreeMap::new);
+                    annotations.insert(annotation_key.to_string(), annotation_value.to_string());
+                }
+            }
+            "builder" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.builder = Some(value.clone());
+            }
+            "context" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.context = Some(value.clone());
+            }
+            "dockerfile" => {
+                let buildx = ensure_buildx_config(build);
+                buildx.dockerfile = Some(value.clone());
+            }
+            "load" => {
+                if let Some(parsed) = parse_bool_value(value) {
+                    let buildx = ensure_buildx_config(build);
+                    buildx.load = Some(parsed);
+                }
+            }
+            "provenance" => {
+                if let Some(parsed) = parse_bool_value(value) {
+                    let buildx = ensure_buildx_config(build);
+                    buildx.provenance = Some(parsed);
+                }
+            }
+            "sbom" => {
+                if let Some(parsed) = parse_bool_value(value) {
+                    let buildx = ensure_buildx_config(build);
+                    buildx.sbom = Some(parsed);
+                }
+            }
+            _ => {
+                // Allow matrix entries to target buildx maps via dotted keys.
+                if let Some(arg_key) = key.strip_prefix("build_args.") {
+                    let buildx = ensure_buildx_config(build);
+                    let args = buildx.build_args.get_or_insert_with(BTreeMap::new);
+                    args.insert(arg_key.to_string(), value.clone());
+                    continue;
+                }
+                if let Some(label_key) = key.strip_prefix("labels.") {
+                    let buildx = ensure_buildx_config(build);
+                    let labels = buildx.labels.get_or_insert_with(BTreeMap::new);
+                    labels.insert(label_key.to_string(), value.clone());
+                    continue;
+                }
+                if let Some(annotation_key) = key.strip_prefix("annotations.") {
+                    let buildx = ensure_buildx_config(build);
+                    let annotations = buildx.annotations.get_or_insert_with(BTreeMap::new);
+                    annotations.insert(annotation_key.to_string(), value.clone());
+                }
+            }
         }
     }
 }
@@ -512,6 +659,7 @@ async fn publish_release_artifacts(
     release: &Release,
     changelog_config: Option<config::Changelog>,
     all_archives: Vec<String>,
+    image_tags: Vec<String>,
 ) -> Result<()> {
     let latest_tag = match get_latest_tag().await {
         Ok(tag) => {
@@ -547,9 +695,10 @@ async fn publish_release_artifacts(
         // Use type_name_of_val for a more descriptive placeholder
         let provider_description = std::any::type_name_of_val(&*provider);
         info!("Publishing via {}", provider_description);
-        let archives_clone = all_archives.clone(); // Clone archives for each provider call
+        let archives_clone = all_archives.clone();
+        let image_tags_clone = image_tags.clone();
         match provider
-            .publish(release, archives_clone, latest_tag.clone())
+            .publish(release, archives_clone, image_tags_clone, latest_tag.clone())
             .await
         {
             Ok(_) => info!("Successfully published via {}", provider_description),
@@ -629,11 +778,17 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         // Run builds
         let all_archives = Arc::new(Mutex::new(Vec::new()));
-        run_builds_for_release(release_config, all_archives.clone(), template_meta.clone())
-            .await
-            .with_context(|| {
-                format!("Build process failed for release '{}'", release_config.name)
-            })?;
+        let all_image_tags = Arc::new(Mutex::new(Vec::new()));
+        run_builds_for_release(
+            release_config,
+            all_archives.clone(),
+            all_image_tags.clone(),
+            template_meta.clone(),
+        )
+        .await
+        .with_context(|| {
+            format!("Build process failed for release '{}'", release_config.name)
+        })?;
 
         // Execute after hooks
         if let Some(hooks) = &release_config.hooks {
@@ -650,26 +805,37 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         // Collect archive paths
         let collected_archives = {
             let lock = all_archives.lock().await;
-            lock.clone() // Clone the Vec<String> out of the mutex guard
-        }; // Mutex guard is dropped here
+            lock.clone()
+        };
+        let collected_image_tags = {
+            let lock = all_image_tags.lock().await;
+            lock.clone()
+        };
+
+        if collected_archives.is_empty() && collected_image_tags.is_empty() {
+            warn!(
+                "No archives or images were produced for release '{}'. Skipping checksums and publishing.",
+                release_config.name
+            );
+            continue;
+        }
 
         if collected_archives.is_empty() {
             warn!(
-                "No archives were produced for release '{}'. Skipping checksums and publishing.",
+                "No archives were produced for release '{}'. Skipping checksum generation.",
                 release_config.name
             );
-            continue; // Move to the next release
+        } else {
+            // Create checksums
+            create_checksums_if_needed(release_config, collected_archives.clone())
+                .await
+                .with_context(|| {
+                    format!(
+                        "Checksum creation failed for release '{}'",
+                        release_config.name
+                    )
+                })?;
         }
-
-        // Create checksums
-        create_checksums_if_needed(release_config, collected_archives.clone())
-            .await
-            .with_context(|| {
-                format!(
-                    "Checksum creation failed for release '{}'",
-                    release_config.name
-                )
-            })?;
 
         let changelog = utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await?;
         debug!(
@@ -679,11 +845,16 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
         // Publish artifacts if enabled for this run
         if publish {
-            publish_release_artifacts(release_config, cfg.changelog.clone(), collected_archives)
-                .await
-                .with_context(|| {
-                    format!("Publishing failed for release '{}'", release_config.name)
-                })?;
+            publish_release_artifacts(
+                release_config,
+                cfg.changelog.clone(),
+                collected_archives,
+                collected_image_tags,
+            )
+            .await
+            .with_context(|| {
+                format!("Publishing failed for release '{}'", release_config.name)
+            })?;
         } else {
             info!(
                 "Publishing skipped for release '{}' due to previous checks or --skip-publish flag.",
@@ -719,5 +890,107 @@ impl From<&str> for HookType {
 impl std::fmt::Display for HookType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_build(build_type: BuildType) -> Build {
+        Build {
+            build_type,
+            command: None,
+            buildx: None,
+            artifact: "./bin/app".to_string(),
+            bin_name: None,
+            archive_name: "app".to_string(),
+            name: "Matrix build".to_string(),
+            os: None,
+            arch: None,
+            arm: None,
+            target: None,
+            matrix: None,
+            env: None,
+            prehook: None,
+            posthook: None,
+            no_archive: None,
+            additional_files: None,
+        }
+    }
+
+    #[test]
+    fn test_apply_matrix_to_buildx_fields() {
+        let mut build = base_build(BuildType::Buildx);
+        let mut matrix = BTreeMap::new();
+        matrix.insert("platforms".to_string(), "linux/amd64".to_string());
+        matrix.insert("tags".to_string(), "example:latest".to_string());
+        matrix.insert("cache_from".to_string(), "type=registry,ref=cache".to_string());
+        matrix.insert("cache_to".to_string(), "type=inline".to_string());
+        matrix.insert("outputs".to_string(), "type=registry".to_string());
+        matrix.insert("secrets".to_string(), "id=token,src=./token".to_string());
+        matrix.insert("ssh".to_string(), "default".to_string());
+        matrix.insert("builder".to_string(), "rlsr-builder".to_string());
+        matrix.insert("context".to_string(), "./context".to_string());
+        matrix.insert("dockerfile".to_string(), "./Dockerfile".to_string());
+        matrix.insert("target".to_string(), "release".to_string());
+        matrix.insert("provenance".to_string(), "true".to_string());
+        matrix.insert("sbom".to_string(), "false".to_string());
+        matrix.insert("load".to_string(), "true".to_string());
+        matrix.insert(
+            "build_args.RUST_VERSION".to_string(),
+            "1.75".to_string(),
+        );
+        matrix.insert(
+            "labels.org.opencontainers.image.title".to_string(),
+            "rlsr".to_string(),
+        );
+        matrix.insert(
+            "annotations.org.opencontainers.image.description".to_string(),
+            "desc".to_string(),
+        );
+
+        apply_matrix_to_build(&mut build, &matrix);
+
+        let buildx = build.buildx.as_ref().expect("buildx should be initialized");
+        assert_eq!(buildx.platforms.clone().unwrap(), vec!["linux/amd64".to_string()]);
+        assert_eq!(buildx.tags.clone().unwrap(), vec!["example:latest".to_string()]);
+        assert_eq!(buildx.cache_from.clone().unwrap(), vec!["type=registry,ref=cache".to_string()]);
+        assert_eq!(buildx.cache_to.clone().unwrap(), vec!["type=inline".to_string()]);
+        assert_eq!(buildx.outputs.clone().unwrap(), vec!["type=registry".to_string()]);
+        assert_eq!(buildx.secrets.clone().unwrap(), vec!["id=token,src=./token".to_string()]);
+        assert_eq!(buildx.ssh.clone().unwrap(), vec!["default".to_string()]);
+        assert_eq!(buildx.builder.as_deref(), Some("rlsr-builder"));
+        assert_eq!(buildx.context.as_deref(), Some("./context"));
+        assert_eq!(buildx.dockerfile.as_deref(), Some("./Dockerfile"));
+        assert_eq!(buildx.target.as_deref(), Some("release"));
+        assert_eq!(buildx.provenance, Some(true));
+        assert_eq!(buildx.sbom, Some(false));
+        assert_eq!(buildx.load, Some(true));
+        assert_eq!(build.target, None);
+        assert_eq!(
+            buildx.build_args.as_ref().and_then(|args| args.get("RUST_VERSION").cloned()),
+            Some("1.75".to_string())
+        );
+        assert_eq!(
+            buildx.labels.as_ref().and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
+            Some("rlsr".to_string())
+        );
+        assert_eq!(
+            buildx.annotations.as_ref().and_then(|annotations| annotations.get("org.opencontainers.image.description").cloned()),
+            Some("desc".to_string())
+        );
+    }
+
+    #[test]
+    fn test_apply_matrix_to_custom_target_field() {
+        let mut build = base_build(BuildType::Custom);
+        let mut matrix = BTreeMap::new();
+        matrix.insert("target".to_string(), "x86_64-unknown-linux-gnu".to_string());
+
+        apply_matrix_to_build(&mut build, &matrix);
+
+        assert_eq!(build.target.as_deref(), Some("x86_64-unknown-linux-gnu"));
+        assert!(build.buildx.is_none());
     }
 }

@@ -14,6 +14,7 @@ pub trait ReleaseProvider {
         &self,
         cfg: &Release,
         all_archives: Vec<String>,
+        image_tags: Vec<String>,
         latest_tag: String,
     ) -> Result<()>;
 }
