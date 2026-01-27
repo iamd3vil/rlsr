@@ -6,9 +6,13 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Rlsr documentation",
-      social: {
-        github: "https://github.com/iamd3vil/rlsr",
-      },
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/iamd3vil/rlsr",
+        },
+      ],
       sidebar: [
         "installation",
         "github-actions",
