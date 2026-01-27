@@ -1,3 +1,9 @@
+<div align="right">
+  <a href="https://zerodha.tech">
+    <img src="https://zerodha.tech/static/images/github-badge.svg" width="140" />
+  </a>
+</div>
+
 # Rlsr (Releaser)
 
 Rlsr is a release automation CLI for building, packaging, checksumming, and publishing release artifacts for your projects.
