@@ -301,8 +301,13 @@ async fn run_builds_sequentially(
         let build_config = &expanded_build.build;
         let build_name = &build_config.name;
         info!("Executing build: {}", build_name);
-        let result =
-            build::run_build(release, build_config, &template_meta, &expanded_build.matrix).await;
+        let result = build::run_build(
+            release,
+            build_config,
+            &template_meta,
+            &expanded_build.matrix,
+        )
+        .await;
 
         match result {
             Ok(build_result) => {
@@ -317,10 +322,7 @@ async fn run_builds_sequentially(
                 }
                 if !build_result.image_tags.is_empty() {
                     // Aggregate buildx tags for later publish steps.
-                    all_image_tags
-                        .lock()
-                        .await
-                        .extend(build_result.image_tags);
+                    all_image_tags.lock().await.extend(build_result.image_tags);
                 }
                 successful_builds += 1;
             }
@@ -331,7 +333,12 @@ async fn run_builds_sequentially(
         }
     }
 
-    finalize_build_results(release, expanded_builds.len(), successful_builds, build_failures)
+    finalize_build_results(
+        release,
+        expanded_builds.len(),
+        successful_builds,
+        build_failures,
+    )
 }
 
 async fn run_builds_in_parallel(
@@ -415,7 +422,12 @@ async fn run_builds_in_parallel(
         }
     }
 
-    finalize_build_results(release, expanded_builds.len(), successful_builds, build_failures)
+    finalize_build_results(
+        release,
+        expanded_builds.len(),
+        successful_builds,
+        build_failures,
+    )
 }
 
 fn finalize_build_results(
@@ -467,7 +479,10 @@ fn expand_builds(builds: &[Build]) -> Result<Vec<ExpandedBuild>> {
     for build in builds {
         if let Some(matrix_groups) = &build.matrix {
             if matrix_groups.is_empty() {
-                bail!("matrix for build '{}' must define at least one entry", build.name);
+                bail!(
+                    "matrix for build '{}' must define at least one entry",
+                    build.name
+                );
             }
 
             for group in matrix_groups {
@@ -698,7 +713,12 @@ async fn publish_release_artifacts(
         let archives_clone = all_archives.clone();
         let image_tags_clone = image_tags.clone();
         match provider
-            .publish(release, archives_clone, image_tags_clone, latest_tag.clone())
+            .publish(
+                release,
+                archives_clone,
+                image_tags_clone,
+                latest_tag.clone(),
+            )
             .await
         {
             Ok(_) => info!("Successfully published via {}", provider_description),
@@ -786,9 +806,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             template_meta.clone(),
         )
         .await
-        .with_context(|| {
-            format!("Build process failed for release '{}'", release_config.name)
-        })?;
+        .with_context(|| format!("Build process failed for release '{}'", release_config.name))?;
 
         // Execute after hooks
         if let Some(hooks) = &release_config.hooks {
@@ -852,9 +870,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 collected_image_tags,
             )
             .await
-            .with_context(|| {
-                format!("Publishing failed for release '{}'", release_config.name)
-            })?;
+            .with_context(|| format!("Publishing failed for release '{}'", release_config.name))?;
         } else {
             info!(
                 "Publishing skipped for release '{}' due to previous checks or --skip-publish flag.",
@@ -925,7 +941,10 @@ mod tests {
         let mut matrix = BTreeMap::new();
         matrix.insert("platforms".to_string(), "linux/amd64".to_string());
         matrix.insert("tags".to_string(), "example:latest".to_string());
-        matrix.insert("cache_from".to_string(), "type=registry,ref=cache".to_string());
+        matrix.insert(
+            "cache_from".to_string(),
+            "type=registry,ref=cache".to_string(),
+        );
         matrix.insert("cache_to".to_string(), "type=inline".to_string());
         matrix.insert("outputs".to_string(), "type=registry".to_string());
         matrix.insert("secrets".to_string(), "id=token,src=./token".to_string());
@@ -937,10 +956,7 @@ mod tests {
         matrix.insert("provenance".to_string(), "true".to_string());
         matrix.insert("sbom".to_string(), "false".to_string());
         matrix.insert("load".to_string(), "true".to_string());
-        matrix.insert(
-            "build_args.RUST_VERSION".to_string(),
-            "1.75".to_string(),
-        );
+        matrix.insert("build_args.RUST_VERSION".to_string(), "1.75".to_string());
         matrix.insert(
             "labels.org.opencontainers.image.title".to_string(),
             "rlsr".to_string(),
@@ -953,12 +969,30 @@ mod tests {
         apply_matrix_to_build(&mut build, &matrix);
 
         let buildx = build.buildx.as_ref().expect("buildx should be initialized");
-        assert_eq!(buildx.platforms.clone().unwrap(), vec!["linux/amd64".to_string()]);
-        assert_eq!(buildx.tags.clone().unwrap(), vec!["example:latest".to_string()]);
-        assert_eq!(buildx.cache_from.clone().unwrap(), vec!["type=registry,ref=cache".to_string()]);
-        assert_eq!(buildx.cache_to.clone().unwrap(), vec!["type=inline".to_string()]);
-        assert_eq!(buildx.outputs.clone().unwrap(), vec!["type=registry".to_string()]);
-        assert_eq!(buildx.secrets.clone().unwrap(), vec!["id=token,src=./token".to_string()]);
+        assert_eq!(
+            buildx.platforms.clone().unwrap(),
+            vec!["linux/amd64".to_string()]
+        );
+        assert_eq!(
+            buildx.tags.clone().unwrap(),
+            vec!["example:latest".to_string()]
+        );
+        assert_eq!(
+            buildx.cache_from.clone().unwrap(),
+            vec!["type=registry,ref=cache".to_string()]
+        );
+        assert_eq!(
+            buildx.cache_to.clone().unwrap(),
+            vec!["type=inline".to_string()]
+        );
+        assert_eq!(
+            buildx.outputs.clone().unwrap(),
+            vec!["type=registry".to_string()]
+        );
+        assert_eq!(
+            buildx.secrets.clone().unwrap(),
+            vec!["id=token,src=./token".to_string()]
+        );
         assert_eq!(buildx.ssh.clone().unwrap(), vec!["default".to_string()]);
         assert_eq!(buildx.builder.as_deref(), Some("rlsr-builder"));
         assert_eq!(buildx.context.as_deref(), Some("./context"));
@@ -969,15 +1003,26 @@ mod tests {
         assert_eq!(buildx.load, Some(true));
         assert_eq!(build.target, None);
         assert_eq!(
-            buildx.build_args.as_ref().and_then(|args| args.get("RUST_VERSION").cloned()),
+            buildx
+                .build_args
+                .as_ref()
+                .and_then(|args| args.get("RUST_VERSION").cloned()),
             Some("1.75".to_string())
         );
         assert_eq!(
-            buildx.labels.as_ref().and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
+            buildx
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
             Some("rlsr".to_string())
         );
         assert_eq!(
-            buildx.annotations.as_ref().and_then(|annotations| annotations.get("org.opencontainers.image.description").cloned()),
+            buildx
+                .annotations
+                .as_ref()
+                .and_then(|annotations| annotations
+                    .get("org.opencontainers.image.description")
+                    .cloned()),
             Some("desc".to_string())
         );
     }

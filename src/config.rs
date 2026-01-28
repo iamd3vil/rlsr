@@ -305,11 +305,17 @@ releases:
         assert_eq!(buildx.builder.as_deref(), Some("default"));
         assert_eq!(buildx.load, Some(true));
         assert_eq!(
-            buildx.build_args.as_ref().and_then(|args| args.get("FOO").cloned()),
+            buildx
+                .build_args
+                .as_ref()
+                .and_then(|args| args.get("FOO").cloned()),
             Some("bar".to_string())
         );
         assert_eq!(
-            buildx.labels.as_ref().and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
+            buildx
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.get("org.opencontainers.image.title").cloned()),
             Some("rlsr".to_string())
         );
         assert_eq!(
@@ -331,12 +337,14 @@ releases:
             buildx.secrets.as_deref(),
             Some(&["id=token,src=./token".to_string()][..])
         );
+        assert_eq!(buildx.ssh.as_deref(), Some(&["default".to_string()][..]));
         assert_eq!(
-            buildx.ssh.as_deref(),
-            Some(&["default".to_string()][..])
-        );
-        assert_eq!(
-            buildx.annotations.as_ref().and_then(|annotations| annotations.get("org.opencontainers.image.description").cloned()),
+            buildx
+                .annotations
+                .as_ref()
+                .and_then(|annotations| annotations
+                    .get("org.opencontainers.image.description")
+                    .cloned()),
             Some("desc".to_string())
         );
     }

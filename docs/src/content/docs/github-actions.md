@@ -34,7 +34,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Release
-        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.0
+        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.1
         with:
           config: rlsr.yml
           publish: true
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.1
         with:
           publish: false
 ```
@@ -64,7 +64,7 @@ jobs:
 | `config` | string | `rlsr.yml` | Path to the rlsr config file. |
 | `publish` | string | `false` | Publish artifacts (false passes `--skip-publish`). |
 | `rm_dist` | string | `false` | Remove the dist directory before building. |
-| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.8.0`). |
+| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.8.1`). |
 | `args` | string | `""` | Extra args for `rlsr` (space-separated). |
 | `working_directory` | string | `.` | Working directory to run `rlsr` in. |
 | `github_token` | string | `""` | Token for GitHub API operations. Falls back to `GITHUB_TOKEN`. |
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.1
         with:
           working_directory: ./crates/my-tool
           config: rlsr.yml
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.1
         with:
           publish: false
 ```
