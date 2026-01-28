@@ -263,11 +263,16 @@ async fn process_artifacts(
 
         let files = prepare_archive_files(release, build, &artifact, &bin_path, build_meta).await?;
 
-        let zip_path = archive_files(files, release.dist_folder.clone(), archive_name.clone())
-            .await
-            .with_context(|| format!("error while creating archive for build: {}", archive_name))?;
+        let archive_path = archive_files(
+            files,
+            release.dist_folder.clone(),
+            archive_name.clone(),
+            build.archive_format,
+        )
+        .await
+        .with_context(|| format!("error while creating archive for build: {}", archive_name))?;
 
-        Ok(zip_path)
+        Ok(archive_path)
     } else {
         // Copy artifact with the final name
         copy_artifact_with_name(release, &artifact, &archive_name).await?;
@@ -368,7 +373,7 @@ async fn copy_artifact_with_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{BuildType, ReleaseTargets};
+    use crate::config::{ArchiveFormat, BuildType, ReleaseTargets};
     use crate::TemplateMeta;
     use std::collections::BTreeMap;
 
@@ -434,6 +439,7 @@ mod tests {
             posthook: None,
             no_archive: None,
             additional_files: None,
+            archive_format: ArchiveFormat::default(),
         }
     }
 

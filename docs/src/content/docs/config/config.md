@@ -38,24 +38,29 @@ releases:
       - command: "just build-linux"
         artifact: "target/x86_64-unknown-linux-gnu/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-linux-x86_64"
+        archive_format: tar_gz  # Use tar.gz instead of zip
         name: "Linux build"
         env:
           - "BIN_NAME=rlsr.bin"
       - command: "just build-macos"
         artifact: "target/aarch64-apple-darwin/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-macos-arm64"
+        archive_format: tar_gz
         name: "MacOS build"
       - command: "just build-windows"
         artifact: "target/x86_64-pc-windows-gnu/release/rlsr.exe"
         archive_name: "rlsr-{{ meta.tag }}-windows-x86_64"
+        # archive_format defaults to zip, good for Windows
         name: "Windows build"
       - command: "just build-freebsd"
         artifact: "target/x86_64-unknown-freebsd/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-freebsd-x86_64"
+        archive_format: tar_zstd  # Zstandard for better compression
         name: "FreeBSD build"
       - command: "just build-linux-arm64"
         artifact: "target/aarch64-unknown-linux-musl/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-linux-arm64"
+        archive_format: tar_gz
         name: "Linux ARM64 build"
 changelog:
   format: "github"
@@ -128,6 +133,11 @@ The `builds` section is an array that defines one or more build configurations. 
 - `bin_name`: (Optional) The name of the binary produced.
 - `artifact`: The path to the built artifact.
 - `archive_name`: The name of the archive containing the artifact.
+- `archive_format`: (Optional) The archive format to use. Defaults to `zip`. Supported formats:
+  - `zip`: Standard ZIP archive (default)
+  - `tar_gz` or `"tar.gz"`: Gzip-compressed tar archive
+  - `tar_zstd` or `"tar.zstd"`: Zstandard-compressed tar archive
+  - `tar_lz4` or `"tar.lz4"`: LZ4-compressed tar archive
 - `os`: (Optional) The target operating system label.
 - `arch`: (Optional) The target architecture label.
 - `arm`: (Optional) The ARM version label.

@@ -96,6 +96,31 @@ pub enum BuildType {
     Buildx,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum ArchiveFormat {
+    #[serde(rename = "zip")]
+    #[default]
+    Zip,
+    #[serde(alias = "tar.gz", rename = "tar_gz")]
+    TarGz,
+    #[serde(alias = "tar.zstd", rename = "tar_zstd")]
+    TarZstd,
+    #[serde(alias = "tar.lz4", rename = "tar_lz4")]
+    TarLz4,
+}
+
+impl ArchiveFormat {
+    /// Returns the file extension for this archive format.
+    pub fn extension(&self) -> &'static str {
+        match self {
+            ArchiveFormat::Zip => ".zip",
+            ArchiveFormat::TarGz => ".tar.gz",
+            ArchiveFormat::TarZstd => ".tar.zstd",
+            ArchiveFormat::TarLz4 => ".tar.lz4",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct BuildxConfig {
     pub context: Option<String>,
@@ -150,6 +175,11 @@ pub struct Build {
 
     // Additonal files to be included in the archive.
     pub additional_files: Option<Vec<String>>,
+
+    /// Archive format for the build (zip, tar_gz, tar_zstd, tar_lz4).
+    /// Defaults to zip.
+    #[serde(default)]
+    pub archive_format: ArchiveFormat,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -347,5 +377,111 @@ releases:
                     .cloned()),
             Some("desc".to_string())
         );
+    }
+
+    #[test]
+    fn test_archive_format_extension() {
+        assert_eq!(ArchiveFormat::Zip.extension(), ".zip");
+        assert_eq!(ArchiveFormat::TarGz.extension(), ".tar.gz");
+        assert_eq!(ArchiveFormat::TarZstd.extension(), ".tar.zstd");
+        assert_eq!(ArchiveFormat::TarLz4.extension(), ".tar.lz4");
+    }
+
+    #[test]
+    fn test_archive_format_defaults_to_zip() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app"
+        name: "Default format build"
+"#;
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let build = &cfg.releases[0].builds[0];
+        assert_eq!(build.archive_format, ArchiveFormat::Zip);
+    }
+
+    #[test]
+    fn test_archive_format_deserialize_all_variants() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-zip"
+        name: "Zip build"
+        archive_format: zip
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-targz"
+        name: "Tar.gz build"
+        archive_format: tar_gz
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-tarzstd"
+        name: "Tar.zstd build"
+        archive_format: tar_zstd
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-tarlz4"
+        name: "Tar.lz4 build"
+        archive_format: tar_lz4
+"#;
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let builds = &cfg.releases[0].builds;
+
+        assert_eq!(builds[0].archive_format, ArchiveFormat::Zip);
+        assert_eq!(builds[1].archive_format, ArchiveFormat::TarGz);
+        assert_eq!(builds[2].archive_format, ArchiveFormat::TarZstd);
+        assert_eq!(builds[3].archive_format, ArchiveFormat::TarLz4);
+    }
+
+    #[test]
+    fn test_archive_format_alias_with_dot() {
+        // Test that aliases like "tar.gz" work (using quotes in YAML)
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-targz"
+        name: "Tar.gz build with dot alias"
+        archive_format: "tar.gz"
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-tarzstd"
+        name: "Tar.zstd build with dot alias"
+        archive_format: "tar.zstd"
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app-tarlz4"
+        name: "Tar.lz4 build with dot alias"
+        archive_format: "tar.lz4"
+"#;
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let builds = &cfg.releases[0].builds;
+
+        assert_eq!(builds[0].archive_format, ArchiveFormat::TarGz);
+        assert_eq!(builds[1].archive_format, ArchiveFormat::TarZstd);
+        assert_eq!(builds[2].archive_format, ArchiveFormat::TarLz4);
     }
 }
