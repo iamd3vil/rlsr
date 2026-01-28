@@ -48,15 +48,16 @@ fn render_map<T: TemplateContext>(
 pub(crate) fn build_buildx_command<T: TemplateContext>(
     build: &Build,
     meta: &T,
+    build_name: &str,
 ) -> Result<BuildxCommand> {
     // Render buildx config values with templates before assembling CLI args.
     let buildx = build
         .buildx
         .as_ref()
-        .ok_or_else(|| eyre!("missing buildx config for build '{}'", build.name))?;
+        .ok_or_else(|| eyre!("missing buildx config for build '{}'", build_name))?;
 
-    let context = render_optional_string(buildx.context.as_ref(), meta)
-        .unwrap_or_else(|| ".".to_string());
+    let context =
+        render_optional_string(buildx.context.as_ref(), meta).unwrap_or_else(|| ".".to_string());
     let dockerfile = render_optional_string(buildx.dockerfile.as_ref(), meta)
         .unwrap_or_else(|| "Dockerfile".to_string());
     let tags = render_list(buildx.tags.as_ref(), meta);
@@ -67,7 +68,7 @@ pub(crate) fn build_buildx_command<T: TemplateContext>(
     if load && !outputs.is_empty() {
         bail!(
             "buildx build '{}' cannot set both load and outputs",
-            build.name
+            build_name
         );
     }
 
@@ -75,7 +76,7 @@ pub(crate) fn build_buildx_command<T: TemplateContext>(
     if load && tags.is_empty() {
         bail!(
             "buildx build '{}' must set tags when load is true",
-            build.name
+            build_name
         );
     }
 
@@ -188,9 +189,9 @@ pub(crate) fn buildx_builder_exists_error(stdout: &str, stderr: &str) -> bool {
 }
 
 pub(crate) async fn ensure_buildx_builder(
-    build: &Build,
     builder: &str,
     envs: &Option<Vec<String>>,
+    build_name: &str,
 ) -> Result<()> {
     let create_cmd = format!("docker buildx create --name {} --use", builder);
     let output = utils::execute_command(&create_cmd, envs)
@@ -198,7 +199,7 @@ pub(crate) async fn ensure_buildx_builder(
         .with_context(|| {
             format!(
                 "failed to run buildx create for build '{}' (builder '{}')",
-                build.name, builder
+                build_name, builder
             )
         })?;
 
@@ -218,7 +219,7 @@ pub(crate) async fn ensure_buildx_builder(
             .with_context(|| {
                 format!(
                     "failed to run buildx use for build '{}' (builder '{}')",
-                    build.name, builder
+                    build_name, builder
                 )
             })?;
 
@@ -231,7 +232,7 @@ pub(crate) async fn ensure_buildx_builder(
         bail!(
             "buildx builder '{}' for build '{}' failed to activate: stdout: {} stderr: {}",
             builder,
-            build.name,
+            build_name,
             use_stdout.trim(),
             use_stderr.trim()
         );
@@ -240,7 +241,7 @@ pub(crate) async fn ensure_buildx_builder(
     bail!(
         "buildx builder '{}' for build '{}' failed to create: stdout: {} stderr: {}",
         builder,
-        build.name,
+        build_name,
         stdout.trim(),
         stderr.trim()
     );
@@ -359,7 +360,7 @@ mod tests {
 
         let build = buildx_build(buildx);
         let meta = test_meta();
-        let command = build_buildx_command(&build, &meta).unwrap();
+        let command = build_buildx_command(&build, &meta, &build.name).unwrap();
 
         assert_eq!(command.tags, vec!["example/rlsr:v1.2.3".to_string()]);
         assert_eq!(
@@ -379,7 +380,7 @@ mod tests {
 
         let build = buildx_build(buildx);
         let meta = test_meta();
-        let err = build_buildx_command(&build, &meta).unwrap_err();
+        let err = build_buildx_command(&build, &meta, &build.name).unwrap_err();
 
         assert!(err.to_string().contains("cannot set both load and outputs"));
     }
@@ -393,7 +394,7 @@ mod tests {
 
         let build = buildx_build(buildx);
         let meta = test_meta();
-        let err = build_buildx_command(&build, &meta).unwrap_err();
+        let err = build_buildx_command(&build, &meta, &build.name).unwrap_err();
 
         assert!(err.to_string().contains("must set tags when load is true"));
     }

@@ -83,7 +83,7 @@ pub async fn run_build(
 
     // Check if build was successful.
     if !command_result.output.status.success() {
-        bail!("build failed: {}", build.name);
+        bail!("build failed: {}", build_meta.build_name);
     }
 
     // Execute posthook if present
@@ -93,7 +93,7 @@ pub async fn run_build(
     let archive_path = if build.artifact.trim().is_empty() {
         debug!(
             "build '{}' has no artifact configured; skipping archive generation",
-            build.name
+            build_meta.build_name
         );
         None
     } else {
@@ -111,7 +111,7 @@ fn create_build_meta(
     meta: &TemplateMeta,
     matrix: &BTreeMap<String, String>,
 ) -> BuildMeta {
-    BuildMeta {
+    let mut build_meta = BuildMeta {
         build_name: build.name.clone(),
         tag: meta.tag.clone(),
         version: meta.version.clone(),
@@ -132,7 +132,12 @@ fn create_build_meta(
         arm: build.arm.clone().unwrap_or_default(),
         target: build.target.clone().unwrap_or_default(),
         matrix: matrix.clone(),
-    }
+    };
+
+    let build_name = templating::render_template(&build_meta.build_name, &build_meta);
+    build_meta.build_name = build_name;
+
+    build_meta
 }
 
 fn collect_envs(release: &Release, build: &Build, build_meta: &BuildMeta) -> Option<Vec<String>> {
@@ -154,7 +159,10 @@ async fn execute_prehook(release: &Release, build: &Build, build_meta: &BuildMet
     if let Some(prehook) = &build.prehook {
         let prehook = templating::render_template(prehook, build_meta);
 
-        info!("executing prehook: `{}` for build: {}", prehook, build.name);
+        info!(
+            "executing prehook: `{}` for build: {}",
+            prehook, build_meta.build_name
+        );
 
         let envs = collect_envs(release, build, build_meta);
 
@@ -184,7 +192,10 @@ async fn execute_build_command(
     match build.build_type {
         BuildType::Custom => {
             let command = build.command.as_ref().ok_or_else(|| {
-                eyre!("missing build command for build '{}'", build.name)
+                eyre!(
+                    "missing build command for build '{}'",
+                    build_meta.build_name
+                )
             })?;
             let cmd = templating::render_template(command, build_meta);
             debug!("executing command: {}", cmd);
@@ -195,9 +206,9 @@ async fn execute_build_command(
             })
         }
         BuildType::Buildx => {
-            let buildx_command = build_buildx_command(build, build_meta)?;
+            let buildx_command = build_buildx_command(build, build_meta, &build_meta.build_name)?;
             if let Some(builder) = buildx_command.builder.as_deref() {
-                ensure_buildx_builder(build, builder, &envs).await?;
+                ensure_buildx_builder(builder, &envs, &build_meta.build_name).await?;
             }
             debug!("executing command: {}", buildx_command.command);
             if !buildx_command.tags.is_empty() {
@@ -218,7 +229,7 @@ async fn execute_posthook(release: &Release, build: &Build, build_meta: &BuildMe
         let posthook = templating::render_template(posthook, build_meta);
         info!(
             "executing posthook: `{}` for build: {}",
-            posthook, build.name
+            posthook, build_meta.build_name
         );
 
         let envs = collect_envs(release, build, build_meta);
@@ -457,6 +468,20 @@ mod tests {
         assert_eq!(build_meta.arch, "amd64");
         assert_eq!(build_meta.arm, "7");
         assert_eq!(build_meta.target, "x86_64-unknown-linux-musl");
+    }
+
+    #[test]
+    fn test_create_build_meta_renders_build_name_template() {
+        let mut build = base_build();
+        build.name = "Build {{ meta.os }} {{ meta.matrix.arch }} {{ meta.tag }}".to_string();
+        build.os = Some("linux".to_string());
+
+        let meta = test_template_meta();
+        let mut matrix = BTreeMap::new();
+        matrix.insert("arch".to_string(), "amd64".to_string());
+        let build_meta = create_build_meta(&build, &meta, &matrix);
+
+        assert_eq!(build_meta.build_name, "Build linux amd64 v1.2.3");
     }
 
     #[test]

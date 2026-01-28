@@ -10,7 +10,7 @@ Rlsr uses Minijinja (Jinja2-compatible) for templating. Use `{{ ... }}` for valu
 Templating is supported in:
 - Release hooks: `hooks.before`, `hooks.after`
 - Release env values: `env`
-- Build fields: `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
+- Build fields: `name`, `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
 - Build env values: `env`
 - Additional files: release and build `additional_files`
 - Docker target images: `targets.docker.image`, `targets.docker.images`
