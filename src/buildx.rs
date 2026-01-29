@@ -250,7 +250,7 @@ pub(crate) async fn ensure_buildx_builder(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{BuildType, BuildxConfig};
+    use crate::config::{ArchiveFormat, BuildType, BuildxConfig};
     use serde::Serialize;
     use std::collections::HashMap;
 
@@ -314,6 +314,7 @@ mod tests {
             posthook: None,
             no_archive: None,
             additional_files: None,
+            archive_format: ArchiveFormat::default(),
         }
     }
 

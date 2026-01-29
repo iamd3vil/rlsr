@@ -912,6 +912,7 @@ impl std::fmt::Display for HookType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ArchiveFormat;
 
     fn base_build(build_type: BuildType) -> Build {
         Build {
@@ -932,6 +933,7 @@ mod tests {
             posthook: None,
             no_archive: None,
             additional_files: None,
+            archive_format: ArchiveFormat::default(),
         }
     }
 

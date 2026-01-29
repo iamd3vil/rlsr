@@ -34,6 +34,10 @@ releases:
         archive_name: "rlsr-linux-x86_64" # Archive name.
         no_archive: false # If turned true, will not archive the artifact.
 
+        # Archive format: zip (default), tar_gz, tar_zstd, or tar_lz4.
+        # Can also use "tar.gz", "tar.zstd", "tar.lz4" with quotes.
+        archive_format: tar_gz
+
         prehook: "generate_docs.sh" # Optional, a script to run before the build.
         posthook: "posthook.sh"
 

@@ -1,6 +1,8 @@
 use camino::Utf8Path;
 use chrono::{DateTime as ChronoDateTime, Datelike, Timelike, Utc};
 use color_eyre::eyre::{bail, Context, Result};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use log::debug;
 use std::cmp::Ord;
 use std::process::Output;
@@ -9,7 +11,7 @@ use tokio::{process::Command, task};
 use zip::DateTime;
 
 use crate::changelog_formatter;
-use crate::config::{Changelog, Release};
+use crate::config::{ArchiveFormat, Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::{docker, ReleaseProvider};
 use regex::Regex;
@@ -433,48 +435,132 @@ fn parse_go_module_name(contents: &str) -> Option<String> {
     None
 }
 
-// Creates an zip archive with the file given.
+/// Creates an archive with the files given using the specified format.
 pub async fn archive_files(
     filenames: Vec<ArchiveFile>,
     dist: String,
     name: String,
+    format: ArchiveFormat,
 ) -> Result<String> {
     let path: Result<String> = task::spawn_blocking(move || {
-        let zip_file_name = Utf8Path::new(&dist).join(name);
-        let zip_path = format!("{}.zip", zip_file_name);
-        debug!("creating archive: {:?}", zip_path);
-        let zip_file = fs::File::create(&zip_path)?;
-        let mut zip = zip::ZipWriter::new(zip_file);
-        for file in filenames {
-            let mut f = fs::File::open(&file.disk_path)?;
-            let mod_time = f.metadata().ok().and_then(|meta| meta.modified().ok());
-            let zip_time = mod_time
-                .and_then(|mod_time| {
-                    let dt: ChronoDateTime<Utc> = mod_time.into();
-                    let year = u16::try_from(dt.year()).ok()?;
-                    DateTime::from_date_and_time(
-                        year,
-                        dt.month() as u8,
-                        dt.day() as u8,
-                        dt.hour() as u8,
-                        dt.minute() as u8,
-                        dt.second() as u8,
-                    )
-                    .ok()
-                })
-                .unwrap_or_else(DateTime::default_for_write);
+        let base_path = Utf8Path::new(&dist).join(&name);
+        let archive_path = format!("{}{}", base_path, format.extension());
+        debug!("creating archive: {:?} with format {:?}", archive_path, format);
 
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .last_modified_time(zip_time)
-                .unix_permissions(0o744);
-            zip.start_file(file.archive_filename, options)?;
-            io::copy(&mut f, &mut zip)?;
-        }
-        Ok(zip_path.to_string())
+        match format {
+            ArchiveFormat::Zip => create_zip_archive(&filenames, &archive_path),
+            ArchiveFormat::TarGz => create_tar_gz_archive(&filenames, &archive_path),
+            ArchiveFormat::TarZstd => create_tar_zstd_archive(&filenames, &archive_path),
+            ArchiveFormat::TarLz4 => create_tar_lz4_archive(&filenames, &archive_path),
+        }?;
+
+        Ok(archive_path)
     })
     .await?;
     path
+}
+
+fn create_zip_archive(filenames: &[ArchiveFile], archive_path: &str) -> Result<()> {
+    let zip_file = fs::File::create(archive_path)?;
+    let mut zip = zip::ZipWriter::new(zip_file);
+
+    for file in filenames {
+        let mut f = fs::File::open(&file.disk_path)?;
+        let mod_time = f.metadata().ok().and_then(|meta| meta.modified().ok());
+        let zip_time = mod_time
+            .and_then(|mod_time| {
+                let dt: ChronoDateTime<Utc> = mod_time.into();
+                let year = u16::try_from(dt.year()).ok()?;
+                DateTime::from_date_and_time(
+                    year,
+                    dt.month() as u8,
+                    dt.day() as u8,
+                    dt.hour() as u8,
+                    dt.minute() as u8,
+                    dt.second() as u8,
+                )
+                .ok()
+            })
+            .unwrap_or_else(DateTime::default_for_write);
+
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .last_modified_time(zip_time)
+            .unix_permissions(0o744);
+        zip.start_file(&file.archive_filename, options)?;
+        io::copy(&mut f, &mut zip)?;
+    }
+
+    zip.finish()?;
+    Ok(())
+}
+
+fn create_tar_gz_archive(filenames: &[ArchiveFile], archive_path: &str) -> Result<()> {
+    let file = fs::File::create(archive_path)?;
+    let encoder = GzEncoder::new(file, Compression::default());
+    let mut tar = tar::Builder::new(encoder);
+
+    for archive_file in filenames {
+        append_file_to_tar(&mut tar, archive_file)?;
+    }
+
+    let encoder = tar.into_inner()?;
+    encoder.finish()?;
+    Ok(())
+}
+
+fn create_tar_zstd_archive(filenames: &[ArchiveFile], archive_path: &str) -> Result<()> {
+    let file = fs::File::create(archive_path)?;
+    let encoder = zstd::stream::Encoder::new(file, 0)?;
+    let mut tar = tar::Builder::new(encoder);
+
+    for archive_file in filenames {
+        append_file_to_tar(&mut tar, archive_file)?;
+    }
+
+    let encoder = tar.into_inner()?;
+    encoder.finish()?;
+    Ok(())
+}
+
+fn create_tar_lz4_archive(filenames: &[ArchiveFile], archive_path: &str) -> Result<()> {
+    let file = fs::File::create(archive_path)?;
+    let encoder = lz4_flex::frame::FrameEncoder::new(file);
+    let mut tar = tar::Builder::new(encoder);
+
+    for archive_file in filenames {
+        append_file_to_tar(&mut tar, archive_file)?;
+    }
+
+    let encoder = tar.into_inner()?;
+    encoder.finish()?;
+    Ok(())
+}
+
+fn append_file_to_tar<W: io::Write>(
+    tar: &mut tar::Builder<W>,
+    archive_file: &ArchiveFile,
+) -> Result<()> {
+    let mut f = fs::File::open(&archive_file.disk_path)?;
+    let metadata = f.metadata()?;
+
+    let mut header = tar::Header::new_gnu();
+    header.set_size(metadata.len());
+    header.set_mode(0o744);
+
+    if let Ok(modified) = metadata.modified() {
+        let duration = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        header.set_mtime(duration.as_secs());
+    }
+
+    header.set_cksum();
+
+    tar.append_data(&mut header, &archive_file.archive_filename, &mut f)
+        .with_context(|| format!("error adding file to tar: {}", archive_file.disk_path))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -589,5 +675,97 @@ version = "0.1.0"
             Some(("owner".to_string(), "repo".to_string()))
         );
         assert!(parse_github_repo_url("https://gitlab.com/owner/repo").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_archive_files_creates_zip() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path();
+        let file_path = dir.join("test.txt");
+        fs::write(&file_path, "hello world").unwrap();
+
+        let files = vec![ArchiveFile {
+            disk_path: file_path.to_string_lossy().to_string(),
+            archive_filename: "test.txt".to_string(),
+        }];
+
+        let archive_path = archive_files(
+            files,
+            dir.to_string_lossy().to_string(),
+            "test-archive".to_string(),
+            ArchiveFormat::Zip,
+        ).await.unwrap();
+
+        assert!(archive_path.ends_with(".zip"));
+        assert!(std::path::Path::new(&archive_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_archive_files_creates_tar_gz() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path();
+        let file_path = dir.join("test.txt");
+        fs::write(&file_path, "hello world").unwrap();
+
+        let files = vec![ArchiveFile {
+            disk_path: file_path.to_string_lossy().to_string(),
+            archive_filename: "test.txt".to_string(),
+        }];
+
+        let archive_path = archive_files(
+            files,
+            dir.to_string_lossy().to_string(),
+            "test-archive".to_string(),
+            ArchiveFormat::TarGz,
+        ).await.unwrap();
+
+        assert!(archive_path.ends_with(".tar.gz"));
+        assert!(std::path::Path::new(&archive_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_archive_files_creates_tar_zstd() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path();
+        let file_path = dir.join("test.txt");
+        fs::write(&file_path, "hello world").unwrap();
+
+        let files = vec![ArchiveFile {
+            disk_path: file_path.to_string_lossy().to_string(),
+            archive_filename: "test.txt".to_string(),
+        }];
+
+        let archive_path = archive_files(
+            files,
+            dir.to_string_lossy().to_string(),
+            "test-archive".to_string(),
+            ArchiveFormat::TarZstd,
+        ).await.unwrap();
+
+        assert!(archive_path.ends_with(".tar.zstd"));
+        assert!(std::path::Path::new(&archive_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_archive_files_creates_tar_lz4() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path();
+        let file_path = dir.join("test.txt");
+        fs::write(&file_path, "hello world").unwrap();
+
+        let files = vec![ArchiveFile {
+            disk_path: file_path.to_string_lossy().to_string(),
+            archive_filename: "test.txt".to_string(),
+        }];
+
+        let archive_path = archive_files(
+            files,
+            dir.to_string_lossy().to_string(),
+            "test-archive".to_string(),
+            ArchiveFormat::TarLz4,
+        ).await.unwrap();
+
+        assert!(archive_path.ends_with(".tar.lz4"));
+        assert!(std::path::Path::new(&archive_path).exists());
     }
 }
