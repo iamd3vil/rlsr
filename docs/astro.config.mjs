@@ -24,6 +24,7 @@ export default defineConfig({
             { label: "Templating", slug: "templating" },
           ],
         },
+        { label: "Project Examples", slug: "examples" },
       ],
     }),
   ],
