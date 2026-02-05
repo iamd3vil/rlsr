@@ -93,7 +93,7 @@ The `releases` section is an array that can contain one or more release configur
 
 The `targets` subsection specifies where the releases will be published. Rlsr supports multiple target types, including GitHub and Docker.
 
-For detailed information on configuring targets, please refer to the [Release Targets Configuration](./targets) page.
+For detailed information on configuring targets, please refer to the [Release Targets Configuration](/config/targets) page.
 
 ### Checksum
 

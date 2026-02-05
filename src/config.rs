@@ -26,6 +26,19 @@ pub struct Github {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Gitlab {
+    pub owner: String,
+    pub repo: String,
+    /// GitLab instance URL (defaults to https://gitlab.com)
+    #[serde(default = "default_gitlab_url")]
+    pub url: String,
+}
+
+fn default_gitlab_url() -> String {
+    "https://gitlab.com".to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Docker {
     pub dockerfile: Option<String>,
     pub image: Option<String>,
@@ -47,6 +60,7 @@ fn default_true() -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ReleaseTargets {
     pub github: Option<Github>,
+    pub gitlab: Option<Gitlab>,
     pub docker: Option<Docker>,
 }
 
@@ -269,6 +283,59 @@ releases:
         assert!(builds[1].target.is_none());
         assert_eq!(builds[1].build_type, BuildType::Custom);
         assert_eq!(builds[1].command.as_deref(), Some("echo build2"));
+    }
+
+    #[test]
+    fn test_gitlab_target_deserialize() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      gitlab:
+        owner: "group/subgroup"
+        repo: "project"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app"
+        name: "Default build"
+"#;
+
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let targets = &cfg.releases[0].targets;
+        let gitlab = targets.gitlab.as_ref().expect("gitlab target should exist");
+
+        assert_eq!(gitlab.owner, "group/subgroup");
+        assert_eq!(gitlab.repo, "project");
+        assert_eq!(gitlab.url, "https://gitlab.com"); // default value
+        assert!(targets.github.is_none());
+    }
+
+    #[test]
+    fn test_gitlab_target_custom_url() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      gitlab:
+        owner: "myteam"
+        repo: "myproject"
+        url: "https://gitlab.example.com"
+    builds:
+      - command: "echo build"
+        artifact: "./bin/app"
+        archive_name: "app"
+        name: "Default build"
+"#;
+
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let gitlab = cfg.releases[0].targets.gitlab.as_ref().expect("gitlab target should exist");
+
+        assert_eq!(gitlab.owner, "myteam");
+        assert_eq!(gitlab.repo, "myproject");
+        assert_eq!(gitlab.url, "https://gitlab.example.com");
     }
 
     #[test]

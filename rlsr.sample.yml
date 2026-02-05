@@ -8,6 +8,10 @@ releases:
       github:
         owner: "iamd3vil"
         repo: "rlsr"
+      gitlab:
+        owner: "namespace" # or username
+        repo: "project-name"
+        # url: "https://gitlab.example.com" # Optional: for self-hosted GitLab (defaults to https://gitlab.com)
       docker:
         image: "localhost:5000/rlsr"
         dockerfile: "./Dockerfile"

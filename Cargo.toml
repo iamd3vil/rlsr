@@ -29,6 +29,7 @@ reqwest = { version = "0.12", default-features = false, features = [
     "stream",
     "multipart",
     "rustls-tls-webpki-roots",
+    "json",
 ] }
 infer = "0.7.0"
 zip = { version = "2.4", default-features = false, features = [
@@ -53,6 +54,7 @@ minijinja = {version = "2.2.0", features = ["loader", "builtins"] }
 ring = "0.17.14"
 semver = "1.0.25"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+urlencoding = "2.1"
 
 [dev-dependencies]
 tempfile = { version = "3.19" }
