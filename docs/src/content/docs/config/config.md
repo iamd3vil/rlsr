@@ -246,6 +246,7 @@ Rlsr also supports templating in the changelog section. The following variables 
 
 - `meta.tag`: The Git tag for the current release (e.g., `v1.2.3`)
 - `commits`: An array of commits since the last release
+- `github_notes`: GitHub's generated release notes, with `format: "github"`
   - See [Templating](/templating/) for the complete list of changelog fields and filters.
 
 ### Example Template

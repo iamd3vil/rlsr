@@ -133,7 +133,7 @@ pub async fn get_github_release_url(tag: &str) -> Result<String> {
     ))
 }
 
-async fn get_github_repo_from_remote() -> Result<Option<(String, String)>> {
+pub async fn get_github_repo_from_remote() -> Result<Option<(String, String)>> {
     let mut cmd = Command::new("git");
     cmd.args(["config", "--get", "remote.origin.url"]);
     let output = cmd.output().await?;

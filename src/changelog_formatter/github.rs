@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use color_eyre::eyre::{Context, Result};
+use color_eyre::eyre::{eyre, Context, Result};
 use minijinja::{context, Environment};
 use octocrab::Octocrab;
 use tokio::{fs, sync::Mutex};
 
-use crate::TemplateMeta;
+use crate::{utils, TemplateMeta};
 
 use super::{get_minijinja_env, Commit, Formatter};
 
@@ -16,6 +16,10 @@ pub struct GithubFormatter {
     ghclient: Octocrab,
 
     tmpl: Environment<'static>,
+
+    // wants_notes is set when the template uses `github_notes`, so the API
+    // call is skipped otherwise.
+    wants_notes: bool,
 
     // cached_handles stores already discovered github handles.
     cached_handles: Mutex<HashMap<String, String>>,
@@ -36,6 +40,8 @@ impl GithubFormatter {
             None => DEFAULT_GH_TEMPLATE.to_string(),
         };
 
+        let wants_notes = content.contains("github_notes");
+
         // Use get_minijinja_env for consistency
         let env = get_minijinja_env(content)?;
 
@@ -43,7 +49,27 @@ impl GithubFormatter {
             ghclient,
             cached_handles,
             tmpl: env,
+            wants_notes,
         })
+    }
+
+    // generate_notes fetches GitHub's auto-generated release notes (What's
+    // Changed, New Contributors, Full Changelog) for the release tag.
+    async fn generate_notes(&self, meta: &TemplateMeta) -> Result<String> {
+        let (owner, repo) = utils::get_github_repo_from_remote()
+            .await?
+            .ok_or_else(|| eyre!("github_notes needs a GitHub remote.origin.url"))?;
+        let repo = self.ghclient.repos(owner, repo);
+        let releases = repo.releases();
+        let mut req = releases.generate_release_notes(&meta.tag);
+        if !meta.previous_tag.is_empty() {
+            req = req.previous_tag_name(&meta.previous_tag);
+        }
+        let notes = req
+            .send()
+            .await
+            .wrap_err("error generating github release notes")?;
+        Ok(notes.body)
     }
 
     async fn get_github_handle(&self, email: &str) -> Result<String> {
@@ -80,12 +106,19 @@ impl Formatter for GithubFormatter {
             commit.handle = Some(handle);
         }
 
+        let github_notes = if self.wants_notes {
+            self.generate_notes(meta).await?
+        } else {
+            String::new()
+        };
+
         // Render the minijinja template.
         let tmpl = self.tmpl.get_template("tmpl").unwrap();
 
         // Create a context with the commits data for the template
         let ctx = context!(
             commits => commits,
+            github_notes => github_notes,
             meta => meta,
             env => &meta.env,
             date => &meta.date,

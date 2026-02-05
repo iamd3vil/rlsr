@@ -83,6 +83,7 @@ env:
 Changelog templates have access to:
 - `meta.*` from TemplateMeta (same as release templates)
 - `commits`: array of commit objects
+- `github_notes`: GitHub's auto-generated release notes (GitHub formatter only, see below)
 
 Commit fields:
 - `commit.hash`, `commit.subject`, `commit.email`
@@ -124,6 +125,30 @@ Write `release-notes/v1.2.0.md` before tagging `v1.2.0`. With `ignore missing`,
 releases without a notes file get only the generated part. Included files are
 rendered as templates too, so `{{ meta.version }}` works inside them; wrap any
 literal `{{` in `{% raw %}...{% endraw %}`.
+
+### GitHub-generated notes
+
+With `format: "github"`, a template that uses `github_notes` gets the body of
+GitHub's [generated release notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes)
+for `meta.previous_tag...meta.tag`. This is the same output as the "Generate
+release notes" button on GitHub: merged PRs with authors and links, a
+"New Contributors" section and a "Full Changelog" compare link.
+
+```jinja
+{% include "release-notes/" ~ meta.tag ~ ".md" ignore missing %}
+
+{{ github_notes }}
+```
+
+Notes:
+- The notes are built from merged pull requests, not from `commits`, so
+  `changelog.exclude` doesn't apply. Use a
+  [`.github/release.yml`](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes#configuring-automatically-generated-release-notes)
+  to group or exclude PRs by label or author.
+- The repository comes from `remote.origin.url` and the call uses
+  `GITHUB_TOKEN`.
+- The API is only called when `github_notes` appears in the main template file,
+  not in included files.
 
 ## Filters
 
