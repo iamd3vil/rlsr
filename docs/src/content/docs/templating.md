@@ -102,6 +102,29 @@ Example:
 {% endfor %}
 ```
 
+### Per-release notes
+
+Changelog templates can `{% include %}` files, with paths relative to the
+directory rlsr runs from. Use this to put hand-written notes (highlights,
+upgrade steps) above the generated changes:
+
+```jinja
+{% include "release-notes/" ~ meta.tag ~ ".md" ignore missing %}
+
+## What's Changed
+{% for commit in commits %}
+* {{ commit.subject }}{% if commit.handle %} by @{{ commit.handle }}{% endif %}
+
+{% endfor %}
+
+**Full Changelog**: https://github.com/OWNER/REPO/compare/{{ meta.previous_tag }}...{{ meta.tag }}
+```
+
+Write `release-notes/v1.2.0.md` before tagging `v1.2.0`. With `ignore missing`,
+releases without a notes file get only the generated part. Included files are
+rendered as templates too, so `{{ meta.version }}` works inside them; wrap any
+literal `{{` in `{% raw %}...{% endraw %}`.
+
 ## Filters
 
 Available in all templates:

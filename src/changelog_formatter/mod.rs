@@ -69,6 +69,9 @@ pub async fn get_github_formatter(tmpl: Option<String>) -> Result<Box<dyn Format
 
 pub fn get_minijinja_env(content: String) -> Result<Environment<'static>> {
     let mut env = Environment::new();
+    // Allow `{% include "path" %}` relative to the working directory, e.g.
+    // per-release notes files.
+    env.set_loader(minijinja::path_loader("."));
     env.add_template_owned("tmpl", content)
         .wrap_err("error adding template")?;
     templating::add_string_filters(&mut env);
@@ -197,6 +200,27 @@ mod tests {
         );
         assert!(contains_filter("hello".to_string(), "ell".to_string()));
         assert!(!contains_filter("hello".to_string(), "nope".to_string()));
+    }
+
+    #[test]
+    fn test_include_release_notes() {
+        let env = get_minijinja_env(
+            r#"{% include "src/changelog_formatter/tmpls/" ~ tag ~ ".tpl" ignore missing %}|"#
+                .to_string(),
+        )
+        .unwrap();
+        let tmpl = env.get_template("tmpl").unwrap();
+        let commits = [Commit::from_parts(
+            "abc".into(),
+            "feat: x".into(),
+            "".into(),
+        )];
+        let out = tmpl
+            .render(minijinja::context!(tag => "default", commits => commits))
+            .unwrap();
+        assert!(out.contains("abc: feat: x"));
+        let out = tmpl.render(minijinja::context!(tag => "missing")).unwrap();
+        assert_eq!(out, "|");
     }
 
     #[test]
