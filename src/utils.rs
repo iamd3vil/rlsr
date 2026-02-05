@@ -13,6 +13,7 @@ use zip::DateTime;
 use crate::changelog_formatter;
 use crate::config::{ArchiveFormat, Changelog, Release};
 use crate::release_provider::github::Github;
+use crate::release_provider::gitlab::Gitlab;
 use crate::release_provider::{docker, ReleaseProvider};
 use regex::Regex;
 
@@ -57,8 +58,15 @@ pub fn get_release_providers(
     // Check if github details are provided.
     if release.targets.github.is_some() {
         let ghtoken = get_github_token();
-        let gh = Github::new(ghtoken, changelog.unwrap_or_default());
+        let gh = Github::new(ghtoken, changelog.clone().unwrap_or_default());
         providers.push(Box::new(gh));
+    }
+
+    // Check if gitlab details are provided.
+    if release.targets.gitlab.is_some() {
+        let gltoken = get_gitlab_token();
+        let gl = Gitlab::new(gltoken, changelog.clone().unwrap_or_default());
+        providers.push(Box::new(gl));
     }
 
     if release.targets.docker.is_some() {
@@ -262,6 +270,11 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
 pub fn get_github_token() -> String {
     // Check if `GITHUB_TOKEN` is present.
     env::var("GITHUB_TOKEN").unwrap_or_else(|_| String::new())
+}
+
+pub fn get_gitlab_token() -> String {
+    // Check if `GITLAB_TOKEN` is present.
+    env::var("GITLAB_TOKEN").unwrap_or_else(|_| String::new())
 }
 
 pub async fn is_repo_clean() -> Result<bool> {

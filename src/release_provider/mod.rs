@@ -4,6 +4,7 @@ use color_eyre::eyre::Result;
 
 pub mod docker;
 pub mod github;
+pub mod gitlab;
 
 /// ReleaseProvider is the trait which needs to be implemented for all the
 /// different types of release targets. For example, we can implement a provider

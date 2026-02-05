@@ -21,6 +21,7 @@ export default defineConfig({
           items: [
             { label: "Configuration", slug: "config/config" },
             { label: "Release Targets", slug: "config/targets" },
+            { label: "GitLab Releases", slug: "config/gitlab" },
             { label: "Templating", slug: "templating" },
           ],
         },

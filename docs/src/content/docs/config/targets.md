@@ -10,7 +10,8 @@ The `targets` subsection in your Rlsr configuration specifies where the releases
 Currently, Rlsr supports the following targets:
 
 1. GitHub
-2. Docker
+2. GitLab
+3. Docker
 
 Let's explore each target type in detail.
 
@@ -31,6 +32,28 @@ targets:
 ### Important Note
 
 To release to GitHub, you must set the `GITHUB_TOKEN` environment variable with a valid GitHub Personal Access Token. This token is used to authenticate and perform release operations on your GitHub repository.
+
+## GitLab
+
+To release to GitLab, you need to specify the following in your configuration:
+
+```yaml
+targets:
+  gitlab:
+    owner: "namespace"
+    repo: "project-name"
+    url: "https://gitlab.com" # optional, for self-hosted instances
+```
+
+- `owner`: The GitLab group/namespace or username where the project lives.
+- `repo`: The GitLab project name.
+- `url`: The GitLab instance URL (optional, defaults to `https://gitlab.com`).
+
+### Important Note
+
+To release to GitLab, you must set the `GITLAB_TOKEN` environment variable with a valid GitLab Personal Access Token that has the **api** scope.
+
+For more details on GitLab behavior, see [GitLab Releases](/config/gitlab).
 
 ## Docker
 

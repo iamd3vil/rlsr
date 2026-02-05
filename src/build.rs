@@ -410,6 +410,7 @@ mod tests {
             builds: Vec::new(),
             targets: ReleaseTargets {
                 github: None,
+                gitlab: None,
                 docker: None,
             },
             checksum: None,
