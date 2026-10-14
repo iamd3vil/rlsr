@@ -270,7 +270,7 @@ async fn process_artifacts(
     let artifact = templating::render_template(&build.artifact, build_meta);
 
     // Copy artifact to dist folder
-    let bin_path = copy_artifact_to_dist(release, &artifact, &bin_name).await?;
+    copy_artifact_to_dist(release, &artifact, &bin_name).await?;
 
     let archive_name = templating::render_template(&build.archive_name, build_meta);
     let no_archive = build.no_archive.is_some_and(|val| val);
@@ -279,7 +279,7 @@ async fn process_artifacts(
         // Create an archive
         debug!("creating an archive for {}", &archive_name);
 
-        let files = prepare_archive_files(release, build, &artifact, &bin_path, build_meta).await?;
+        let files = prepare_archive_files(release, build, &artifact, build_meta).await?;
 
         let archive_path = archive_files(
             files,
@@ -319,7 +319,6 @@ async fn prepare_archive_files(
     release: &Release,
     build: &Build,
     artifact: &str,
-    bin_path: &str,
     build_meta: &BuildMeta,
 ) -> Result<Vec<ArchiveFile>> {
     // Get the binary name from artifact
@@ -328,9 +327,10 @@ async fn prepare_archive_files(
         .file_name()
         .with_context(|| format!("error getting filename from artifact: {}", artifact))?;
 
-    // Add all files that need to be archived
+    // Archive straight from the artifact. The dist/<bin_name> copy is shared by
+    // builds with the same bin_name, so parallel builds would race on it.
     let bin_file = ArchiveFile {
-        disk_path: bin_path.to_string(),
+        disk_path: artifact.to_string(),
         archive_filename: bin_name.to_string(),
     };
 
@@ -591,10 +591,15 @@ mod tests {
         let meta = test_template_meta();
         let matrix = BTreeMap::new();
         let build_meta = create_build_meta(&build, &meta, &matrix);
-        let files =
-            prepare_archive_files(&release, &build, "target/bin/app", "dist/app", &build_meta)
-                .await
-                .unwrap();
+        let files = prepare_archive_files(&release, &build, "target/bin/app", &build_meta)
+            .await
+            .unwrap();
+
+        // The binary is read from the artifact, not a shared dist/<bin_name> copy.
+        assert!(files.contains(&ArchiveFile {
+            disk_path: "target/bin/app".to_string(),
+            archive_filename: "app".to_string(),
+        }));
 
         assert!(files.contains(&ArchiveFile {
             disk_path: "dist/v1.2.3/README.md".to_string(),
