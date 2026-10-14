@@ -26,7 +26,8 @@ build-linux-arm64 $RUSTFLAGS="-C target-feature=+crt-static":
 build-freebsd $RUSTFLAGS="-C target-feature=+crt-static":
     cross build --release --target x86_64-unknown-freebsd
 
-build-macos $RUSTFLAGS="-C target-feature=+crt-static":
+# Separate target dirs so parallel builds don't wait on cargo's target dir lock.
+build-macos $RUSTFLAGS="-C target-feature=+crt-static" $CARGO_TARGET_DIR="target/macos":
     #!/usr/bin/env sh
     if [ "$(uname)" = "Darwin" ]; then
         # Running on macOS
@@ -36,14 +37,16 @@ build-macos $RUSTFLAGS="-C target-feature=+crt-static":
         docker run --rm \
         --volume ${PWD}:/io \
         --workdir /io \
+        -e CARGO_TARGET_DIR \
         ghcr.io/rust-cross/cargo-zigbuild:latest \
         sh -c 'rustup update stable && rustup target add aarch64-apple-darwin && cargo zigbuild --release --target aarch64-apple-darwin'
     fi
 
-build-windows $RUSTFLAGS="-C target-feature=+crt-static":
+build-windows $RUSTFLAGS="-C target-feature=+crt-static" $CARGO_TARGET_DIR="target/windows":
     docker run --rm \
     --volume ${PWD}:/io \
     --workdir /io \
+    -e CARGO_TARGET_DIR \
     ghcr.io/rust-cross/cargo-zigbuild:latest \
     sh -c 'rustup update stable && rustup target add x86_64-pc-windows-gnu && cargo zigbuild --release --target x86_64-pc-windows-gnu'
 
