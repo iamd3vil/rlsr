@@ -16,6 +16,10 @@ struct Args {
 
     #[clap(short, long)]
     skip_publish: bool,
+
+    /// Skip build commands and hooks; package and publish existing artifacts.
+    #[clap(long)]
+    skip_build: bool,
 }
 
 #[tokio::main]
@@ -36,6 +40,7 @@ async fn main() -> Result<()> {
     let opts = Opts {
         skip_publish: args.skip_publish,
         rm_dist: args.rm_dist,
+        skip_build: args.skip_build,
     };
 
     rlsr::run(cfg, opts).await

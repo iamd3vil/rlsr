@@ -72,22 +72,40 @@ pub async fn run_build(
     build: &Build,
     meta: &TemplateMeta,
     matrix: &BTreeMap<String, String>,
+    skip_build: bool,
 ) -> Result<BuildResult> {
     let build_meta = create_build_meta(build, meta, matrix);
 
-    // Execute prehook if present
-    execute_prehook(release, build, &build_meta).await?;
+    let image_tags = if skip_build {
+        // Buildx images only exist after the build runs, so there is nothing to reuse.
+        if build.build_type == BuildType::Buildx {
+            bail!(
+                "--skip-build doesn't support buildx builds: {}",
+                build_meta.build_name
+            );
+        }
+        info!(
+            "skipping build command and hooks for build: {}",
+            build_meta.build_name
+        );
+        Vec::new()
+    } else {
+        // Execute prehook if present
+        execute_prehook(release, build, &build_meta).await?;
 
-    // Execute main build command
-    let command_result = execute_build_command(release, build, &build_meta).await?;
+        // Execute main build command
+        let command_result = execute_build_command(release, build, &build_meta).await?;
 
-    // Check if build was successful.
-    if !command_result.output.status.success() {
-        bail!("build failed: {}", build_meta.build_name);
-    }
+        // Check if build was successful.
+        if !command_result.output.status.success() {
+            bail!("build failed: {}", build_meta.build_name);
+        }
 
-    // Execute posthook if present
-    execute_posthook(release, build, &build_meta).await?;
+        // Execute posthook if present
+        execute_posthook(release, build, &build_meta).await?;
+
+        command_result.image_tags
+    };
 
     // Copy artifact and create archive if needed.
     let archive_path = if build.artifact.trim().is_empty() {
@@ -102,7 +120,7 @@ pub async fn run_build(
 
     Ok(BuildResult {
         archive_path,
-        image_tags: command_result.image_tags,
+        image_tags,
     })
 }
 
@@ -502,6 +520,36 @@ mod tests {
         assert!(build_meta.arch.is_empty());
         assert!(build_meta.arm.is_empty());
         assert!(build_meta.target.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_run_build_skip_build_uses_existing_artifact() {
+        let temp = tempfile::tempdir().unwrap();
+        let artifact = temp.path().join("rlsr");
+        std::fs::write(&artifact, "bin").unwrap();
+
+        let mut release = base_release();
+        release.dist_folder = temp.path().join("dist").to_str().unwrap().to_string();
+        std::fs::create_dir(&release.dist_folder).unwrap();
+
+        let mut build = base_build();
+        // Would fail the build if it ran.
+        build.command = Some("false".to_string());
+        build.prehook = Some("false".to_string());
+        build.artifact = artifact.to_str().unwrap().to_string();
+        build.no_archive = Some(true);
+
+        let meta = test_template_meta();
+        let result = run_build(&release, &build, &meta, &BTreeMap::new(), true)
+            .await
+            .unwrap();
+        let archive_path = result.archive_path.unwrap();
+        assert_eq!(std::fs::read_to_string(archive_path).unwrap(), "bin");
+
+        build.build_type = BuildType::Buildx;
+        assert!(run_build(&release, &build, &meta, &BTreeMap::new(), true)
+            .await
+            .is_err());
     }
 
     #[test]

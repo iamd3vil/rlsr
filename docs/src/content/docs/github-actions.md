@@ -110,6 +110,62 @@ jobs:
           publish: false
 ```
 
+### Build on parallel runners
+
+By default rlsr runs every build on one runner. To give each target its own
+runner, build in a matrix, upload the binaries, and run rlsr with
+`--skip-build` in a final job. rlsr then skips the build commands and packages,
+checksums and publishes the binaries found at each build's `artifact` path, so
+`rlsr.yml` stays the same as for local releases.
+
+```yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - name: linux
+            command: just build-linux
+            dir: target/x86_64-unknown-linux-musl/release
+          - name: windows
+            command: just build-windows
+            dir: target/x86_64-pc-windows-gnu/release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Install toolchains here.
+      - run: ${{ matrix.command }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.dir }}/my-tool*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Put each binary back at its `artifact` path from rlsr.yml.
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: target/x86_64-unknown-linux-musl/release
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: target/x86_64-pc-windows-gnu/release
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.8.1
+        with:
+          publish: true
+          args: --skip-build
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
 ## Local testing with act
 
 Use your normal workflow file and run it with:

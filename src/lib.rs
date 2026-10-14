@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 pub struct Opts {
     pub skip_publish: bool,
     pub rm_dist: bool,
+    pub skip_build: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -261,6 +262,7 @@ async fn run_builds_for_release(
     all_archives: Arc<Mutex<Vec<String>>>,
     all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
+    skip_build: bool,
 ) -> Result<()> {
     info!("Starting builds for release: '{}'", release.name);
 
@@ -273,6 +275,7 @@ async fn run_builds_for_release(
             all_archives,
             all_image_tags,
             template_meta,
+            skip_build,
         )
         .await
     } else {
@@ -282,6 +285,7 @@ async fn run_builds_for_release(
             all_archives,
             all_image_tags,
             template_meta,
+            skip_build,
         )
         .await
     }
@@ -293,6 +297,7 @@ async fn run_builds_sequentially(
     all_archives: Arc<Mutex<Vec<String>>>,
     all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
+    skip_build: bool,
 ) -> Result<()> {
     let mut build_failures = Vec::new();
     let mut successful_builds = 0;
@@ -306,6 +311,7 @@ async fn run_builds_sequentially(
             build_config,
             &template_meta,
             &expanded_build.matrix,
+            skip_build,
         )
         .await;
 
@@ -347,6 +353,7 @@ async fn run_builds_in_parallel(
     all_archives: Arc<Mutex<Vec<String>>>,
     all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
+    skip_build: bool,
 ) -> Result<()> {
     let mut build_handles = vec![];
 
@@ -366,6 +373,7 @@ async fn run_builds_in_parallel(
                 &build_config_clone,
                 &template_meta_clone,
                 &matrix_clone,
+                skip_build,
             )
             .await;
 
@@ -761,6 +769,9 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     if opts.skip_publish {
         warn!("--skip-publish is set, publishing will be skipped for all releases.");
     }
+    if opts.skip_build {
+        warn!("--skip-build is set, using existing artifacts instead of running builds.");
+    }
 
     // Initial repo status check affects default publish decision
     check_repo_status(&mut publish)
@@ -804,6 +815,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             all_archives.clone(),
             all_image_tags.clone(),
             template_meta.clone(),
+            opts.skip_build,
         )
         .await
         .with_context(|| format!("Build process failed for release '{}'", release_config.name))?;
