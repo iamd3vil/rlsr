@@ -52,12 +52,14 @@ runs:
         fi
 
         if [[ "$RLSR_VERSION" == "latest" ]]; then
-          RLSR_VERSION="$(python -c 'import json,urllib.request; print(json.load(urllib.request.urlopen("https://api.github.com/repos/iamd3vil/rlsr/releases/latest"))["tag_name"])')"
+          # Follow the releases/latest redirect; the unauthenticated API is rate limited on shared runners.
+          latest_url="$(curl -sSfI -o /dev/null -w '%{redirect_url}' https://github.com/iamd3vil/rlsr/releases/latest)"
+          RLSR_VERSION="${latest_url##*/}"
         fi
 
         url="https://github.com/iamd3vil/rlsr/releases/download/${RLSR_VERSION}/rlsr-${RLSR_VERSION}-${suffix}"
         tmp_dir="$(mktemp -d)"
-        curl -sSL -o "${tmp_dir}/rlsr.zip" "$url"
+        curl -sSfL -o "${tmp_dir}/rlsr.zip" "$url"
         unzip -q "${tmp_dir}/rlsr.zip" -d "${tmp_dir}"
         chmod +x "${tmp_dir}/rlsr"
         mv "${tmp_dir}/rlsr" "${RUNNER_TEMP}/rlsr"
