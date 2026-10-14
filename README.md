@@ -32,7 +32,7 @@ USAGE:
 OPTIONS:
     -c, --config <CONFIG>     [default: rlsr.yml]
     -h, --help                Print help information
-    -p, --skip-publish         Skip publishing release artifacts
+    -s, --skip-publish         Skip publishing release artifacts
         --skip-build          Skip build commands and hooks; package existing artifacts
         --rm-dist             Remove dist folder before building
     -V, --version             Print version information
