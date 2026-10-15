@@ -12,18 +12,29 @@ releases:
       - "rlsr.sample.yml"
       - "LICENSE"
     builds:
-      - command: "just build-linux"
-        artifact: "target/x86_64-unknown-linux-musl/release/rlsr"
-        archive_name: "rlsr-{{ meta.tag }}-linux-x86_64"
-        name: "Linux build"
-      - command: "just build-macos"
-        artifact: "target/macos/aarch64-apple-darwin/release/rlsr"
-        archive_name: "rlsr-{{ meta.tag }}-macos-arm64"
-        name: "MacOS build"
-      - command: "just build-windows"
-        artifact: "target/windows/x86_64-pc-windows-gnu/release/rlsr.exe"
-        archive_name: "rlsr-{{ meta.tag }}-windows-x86_64"
-        name: "Windows build"
+      # Keep the published names (linux-x86_64, macos-arm64, windows-x86_64)
+      # that install.sh and the GitHub Action download.
+      - name: "rlsr"
+        type: "rust"
+        archive_name: "rlsr-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch|replace('amd64', 'x86_64') }}"
+        env:
+          - "RUSTFLAGS=-C target-feature=+crt-static"
+          # Separate target dirs so parallel builds don't wait on cargo's lock.
+          - "CARGO_TARGET_DIR=target/{{ meta.target }}"
+        rust:
+          targets:
+            - "x86_64-unknown-linux-musl"
+            - "x86_64-pc-windows-gnu"
+      # Linking for macOS needs the macOS SDK, so this one builds on a Mac.
+      - name: "rlsr"
+        type: "rust"
+        archive_name: "rlsr-{{ meta.tag }}-macos-{{ meta.arch }}"
+        env:
+          - "CARGO_TARGET_DIR=target/{{ meta.target }}"
+        rust:
+          tool: "cargo build"
+          targets:
+            - "aarch64-apple-darwin"
 changelog:
   format: "github"
   template: "changelog.tpl"

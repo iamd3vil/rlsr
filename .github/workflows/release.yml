@@ -11,49 +11,54 @@ permissions:
   contents: read
 
 jobs:
-  # Each target builds on its own runner; the release job packages the results.
+  # Each target builds on its own runner with `rlsr --split`; the release job
+  # merges the results with `rlsr --merge`. rlsr runs from this commit, so a
+  # release is built with its own code.
   build:
     strategy:
       matrix:
         include:
           - name: linux
-            recipe: build-linux
-            dir: target/x86_64-unknown-linux-musl/release
-            bin: rlsr
-          - name: macos
-            recipe: build-macos
-            dir: target/macos/aarch64-apple-darwin/release
-            bin: rlsr
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
           - name: windows
-            recipe: build-windows
-            dir: target/windows/x86_64-pc-windows-gnu/release
-            bin: rlsr.exe
-    runs-on: ubuntu-latest
+            target: x86_64-pc-windows-gnu
+            runner: ubuntu-latest
+          # Linking for macOS needs the macOS SDK.
+          - name: macos
+            target: aarch64-apple-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install Rust toolchain
-        if: matrix.name == 'linux'
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl
+          targets: ${{ matrix.target }}
 
-      - name: Install musl tools
-        if: matrix.name == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install zig
+        if: runner.os == 'Linux'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
 
-      - name: Install just
-        uses: taiki-e/install-action@just
+      - name: Install cargo-zigbuild
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@cargo-zigbuild
 
-      - name: Build
-        run: just ${{ matrix.recipe }}
+      - name: Build and package
+        run: cargo run --release --locked -- --split --skip-publish --targets ${{ matrix.target }}
 
-      - name: Upload binary
+      - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: ${{ matrix.dir }}/${{ matrix.bin }}
+          name: dist-${{ matrix.name }}
+          path: dist/
           if-no-files-found: error
           retention-days: 1
 
@@ -69,30 +74,18 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # Put each binary back at its `artifact` path from rlsr.yml.
-      - name: Download Linux binary
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download dist
         uses: actions/download-artifact@v4
         with:
-          name: linux
-          path: target/x86_64-unknown-linux-musl/release
+          pattern: dist-*
+          path: dist/
+          merge-multiple: true
 
-      - name: Download macOS binary
-        uses: actions/download-artifact@v4
-        with:
-          name: macos
-          path: target/macos/aarch64-apple-darwin/release
-
-      - name: Download Windows binary
-        uses: actions/download-artifact@v4
-        with:
-          name: windows
-          path: target/windows/x86_64-pc-windows-gnu/release
-
-      - name: Release
-        uses: ./.github/actions/rlsr
-        with:
-          config: rlsr.yml
-          publish: ${{ github.event_name == 'push' }}
-          rm_dist: true
-          args: --skip-build
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checksum and publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_PUBLISH: ${{ github.event_name != 'push' && '--skip-publish' || '' }}
+        run: cargo run --release --locked -- --merge $SKIP_PUBLISH
