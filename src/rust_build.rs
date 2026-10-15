@@ -1,10 +1,15 @@
 use color_eyre::eyre::{bail, Result};
 use log::{debug, info};
+use tokio::sync::Mutex;
 
 use crate::config::{Build, Release};
 use crate::utils;
 
 const DEFAULT_TOOL: &str = "cargo zigbuild";
+
+// rustup can corrupt a toolchain when two installs run at once, and parallel
+// builds would otherwise install their targets at the same time.
+static RUSTUP_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Expands a `type: rust` build into one build per target triple, with the
 /// command, artifact path and platform fields filled in.
@@ -68,6 +73,7 @@ pub async fn ensure_target(build: &Build, envs: &Option<Vec<String>>) -> Result<
         return Ok(());
     }
 
+    let _guard = RUSTUP_LOCK.lock().await;
     let output = utils::execute_command("rustup target list --installed", envs).await?;
     if !output.status.success() {
         bail!(
