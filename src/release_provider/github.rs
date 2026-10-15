@@ -1,7 +1,7 @@
 use crate::config::{Changelog, Github as GithubConfig, Release};
 use crate::release_provider::ReleaseProvider;
-use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
-use crate::{build_template_meta, templating};
+use crate::utils::{get_all_git_log, get_changelog};
+use crate::{templating, TemplateMeta};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, ContextCompat, Result};
@@ -26,9 +26,9 @@ impl ReleaseProvider for Github {
         release: &Release,
         all_archives: Vec<String>,
         _image_tags: Vec<String>,
-        latest_tag: String,
+        meta: &TemplateMeta,
     ) -> Result<()> {
-        self.publish_build(release, all_archives, self.ghtoken.clone(), latest_tag)
+        self.publish_build(release, all_archives, self.ghtoken.clone(), meta)
             .await
             .with_context(|| {
                 format!(
@@ -55,8 +55,9 @@ impl Github {
         release: &Release,
         all_archives: Vec<String>,
         ghtoken: String,
-        latest_tag: String,
+        meta: &TemplateMeta,
     ) -> Result<()> {
+        let latest_tag = &meta.tag;
         let gh = match &release.targets.github {
             Some(gh) => gh,
             None => {
@@ -74,12 +75,12 @@ impl Github {
             .personal_token(ghtoken.clone())
             .build()?;
 
-        let gh_release = match Self::find_release(&ghclient, gh, &latest_tag).await? {
+        let gh_release = match Self::find_release(&ghclient, gh, latest_tag).await? {
             Some(existing) => {
                 info!("release for {} already exists, uploading to it", latest_tag);
                 existing
             }
-            None => self.create_release(&ghclient, gh, &latest_tag).await?,
+            None => self.create_release(&ghclient, gh, meta).await?,
         };
 
         let mut files = all_archives;
@@ -151,22 +152,20 @@ impl Github {
         &self,
         ghclient: &octocrab::Octocrab,
         gh: &GithubConfig,
-        tag: &str,
+        meta: &TemplateMeta,
     ) -> Result<octocrab::models::repos::Release> {
-        let tags = get_all_tags().await?;
-        let changelog = if tags.len() == 1 {
+        let tag = meta.tag.as_str();
+        // The first release has no previous tag to diff against.
+        let changelog = if meta.previous_tag.is_empty() {
             get_all_git_log().await?
         } else {
-            get_changelog(&self.changelog).await?
+            get_changelog(&self.changelog, meta).await?
         };
 
         // Tags like v1.0.0-rc.1 shouldn't become the repo's latest release.
-        let prerelease = !crate::parse_version_meta(tag).prerelease.is_empty();
+        let prerelease = meta.is_prerelease;
         let name = match &gh.name {
-            Some(name) => {
-                let meta = build_template_meta(tag.to_string()).await?;
-                templating::render_template(name, &meta)
-            }
+            Some(name) => templating::render_template(name, meta),
             None => tag.to_string(),
         };
 

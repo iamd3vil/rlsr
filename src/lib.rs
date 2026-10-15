@@ -117,7 +117,7 @@ pub(crate) fn parse_version_meta(tag: &str) -> VersionMeta {
     }
 }
 
-pub async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
+async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
     let version_meta = parse_version_meta(&tag);
     // Git metadata is best-effort; previous tag may be empty on first release.
     let commit = utils::get_full_commit_hash().await?;
@@ -747,18 +747,9 @@ async fn publish_release_artifacts(
     changelog_config: Option<config::Changelog>,
     all_archives: Vec<String>,
     image_tags: Vec<String>,
+    meta: &TemplateMeta,
 ) -> Result<()> {
-    let latest_tag = match get_latest_tag().await {
-        Ok(tag) => {
-            info!("Publishing for tag: {}", tag);
-            tag
-        }
-        Err(e) => {
-            bail!("Cannot publish without a valid tag: {}", e);
-        }
-    };
-
-    debug!("Latest tag for publishing: {}", latest_tag);
+    info!("Publishing for tag: {}", meta.tag);
 
     let providers = utils::get_release_providers(release, changelog_config)
         .context("Failed to initialize release providers")?;
@@ -784,12 +775,7 @@ async fn publish_release_artifacts(
         let archives_clone = all_archives.clone();
         let image_tags_clone = image_tags.clone();
         match provider
-            .publish(
-                release,
-                archives_clone,
-                image_tags_clone,
-                latest_tag.clone(),
-            )
+            .publish(release, archives_clone, image_tags_clone, meta)
             .await
         {
             Ok(_) => info!("Successfully published via {}", provider_description),
@@ -832,12 +818,8 @@ async fn publish_release_artifacts(
 async fn build_release(
     release_config: &Release,
     opts: &Opts,
+    template_meta: Arc<TemplateMeta>,
 ) -> Result<(Vec<String>, Vec<String>)> {
-    // Determine template metadata once per release run
-    let template_meta = get_template_metadata()
-        .await
-        .context("Failed to get template metadata")?;
-
     // Prepare distribution directory
     prepare_dist_directory(release_config, opts.rm_dist)
         .await
@@ -912,6 +894,11 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     for release_config in releases.iter() {
         info!("Processing release: '{}'", release_config.name);
 
+        // Determine template metadata once per release run
+        let template_meta = get_template_metadata()
+            .await
+            .context("Failed to get template metadata")?;
+
         let (collected_archives, collected_image_tags) = if opts.merge {
             let (archives, image_tags) = split::read_manifests(release_config)
                 .await
@@ -924,7 +911,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             );
             (archives, image_tags)
         } else {
-            build_release(release_config, &opts).await?
+            build_release(release_config, &opts, template_meta.clone()).await?
         };
 
         if opts.split {
@@ -977,7 +964,8 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         // Providers build their own changelog; this one is only logged as a
         // preview, so a run that doesn't publish shouldn't fail on it (for
         // example, github_notes without a GITHUB_TOKEN).
-        match utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await {
+        match utils::get_changelog(&cfg.changelog.clone().unwrap_or_default(), &template_meta).await
+        {
             Ok(changelog) => debug!(
                 "Changelog for release '{}': \n{}",
                 release_config.name, changelog
@@ -996,6 +984,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 cfg.changelog.clone(),
                 collected_archives,
                 collected_image_tags,
+                &template_meta,
             )
             .await
             .with_context(|| format!("Publishing failed for release '{}'", release_config.name))?;

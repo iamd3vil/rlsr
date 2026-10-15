@@ -1,4 +1,5 @@
 use crate::config::Release;
+use crate::TemplateMeta;
 use async_trait::async_trait;
 use color_eyre::eyre::Result;
 
@@ -19,6 +20,6 @@ pub trait ReleaseProvider {
         cfg: &Release,
         all_archives: Vec<String>,
         image_tags: Vec<String>,
-        latest_tag: String,
+        meta: &TemplateMeta,
     ) -> Result<()>;
 }

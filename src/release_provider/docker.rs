@@ -1,6 +1,6 @@
 use crate::config::{Docker as DockerConfig, Release};
 use crate::release_provider::ReleaseProvider;
-use crate::{build_template_meta, templating, TemplateMeta};
+use crate::{templating, TemplateMeta};
 use async_trait::async_trait;
 use color_eyre::eyre::{bail, Context, Result};
 use log::info;
@@ -111,20 +111,20 @@ impl ReleaseProvider for Docker {
         release: &Release,
         _all_archives: Vec<String>,
         image_tags: Vec<String>,
-        latest_tag: String,
+        template_meta: &TemplateMeta,
     ) -> Result<()> {
+        let latest_tag = &template_meta.tag;
         let docker = match release.targets.docker.as_ref() {
             Some(docker) => docker,
             None => {
                 bail!("docker config can't be empty")
             }
         };
-        let template_meta = build_template_meta(latest_tag.to_string()).await?;
         let should_push = docker.push;
 
         // Prefer explicit build configuration, then explicit images, then buildx tags.
         if docker.dockerfile.is_some() || docker.image.is_some() || docker.context.is_some() {
-            let image = Self::build_image(docker, &latest_tag, &template_meta)
+            let image = Self::build_image(docker, latest_tag, template_meta)
                 .await
                 .wrap_err_with(|| "error building docker image")?;
             if should_push {
@@ -139,7 +139,7 @@ impl ReleaseProvider for Docker {
             if should_push {
                 let rendered_images = images
                     .iter()
-                    .map(|image| render_docker_image_template(image, &latest_tag, &template_meta))
+                    .map(|image| render_docker_image_template(image, latest_tag, template_meta))
                     .collect::<Vec<_>>();
                 for image in rendered_images {
                     Self::push_image(&image).await?;
@@ -154,7 +154,7 @@ impl ReleaseProvider for Docker {
             if should_push {
                 for image in image_tags
                     .iter()
-                    .map(|image| normalize_image_tag(image, &latest_tag))
+                    .map(|image| normalize_image_tag(image, latest_tag))
                 {
                     Self::push_image(&image).await?;
                 }

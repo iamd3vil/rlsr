@@ -1,6 +1,7 @@
 use crate::config::{Changelog, Release};
 use crate::release_provider::ReleaseProvider;
-use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
+use crate::utils::{get_all_git_log, get_changelog};
+use crate::TemplateMeta;
 use async_trait::async_trait;
 use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, Result};
@@ -22,9 +23,9 @@ impl ReleaseProvider for Gitlab {
         release: &Release,
         all_archives: Vec<String>,
         _image_tags: Vec<String>,
-        latest_tag: String,
+        meta: &TemplateMeta,
     ) -> Result<()> {
-        self.publish_build(release, all_archives, self.token.clone(), latest_tag)
+        self.publish_build(release, all_archives, self.token.clone(), meta)
             .await
             .with_context(|| {
                 format!(
@@ -51,8 +52,9 @@ impl Gitlab {
         release: &Release,
         all_archives: Vec<String>,
         token: String,
-        latest_tag: String,
+        meta: &TemplateMeta,
     ) -> Result<()> {
+        let latest_tag = &meta.tag;
         let gl = match &release.targets.gitlab {
             Some(gl) => gl,
             None => {
@@ -71,12 +73,11 @@ impl Gitlab {
         let encoded_project = urlencoding::encode(&project_path);
         let base_url = gl.url.trim_end_matches('/');
 
-        // Get changelog.
-        let tags = get_all_tags().await?;
-        let changelog = if tags.len() == 1 {
+        // The first release has no previous tag to diff against.
+        let changelog = if meta.previous_tag.is_empty() {
             get_all_git_log().await?
         } else {
-            get_changelog(&self.changelog).await?
+            get_changelog(&self.changelog, meta).await?
         };
 
         let client = reqwest::Client::builder()
@@ -106,7 +107,7 @@ impl Gitlab {
                 base_url,
                 &encoded_project,
                 &token,
-                &latest_tag,
+                latest_tag,
                 archive,
                 &filename,
             )
@@ -128,7 +129,7 @@ impl Gitlab {
                 base_url,
                 &encoded_project,
                 &token,
-                &latest_tag,
+                latest_tag,
                 &checksum_path,
                 "checksums.txt",
             )

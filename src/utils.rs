@@ -15,6 +15,7 @@ use crate::config::{ArchiveFormat, Changelog, Release};
 use crate::release_provider::github::Github;
 use crate::release_provider::gitlab::Gitlab;
 use crate::release_provider::{docker, ReleaseProvider};
+use crate::TemplateMeta;
 use regex::Regex;
 
 /// ArchiveFile has the filename on the disk and the filename in the archive.
@@ -89,25 +90,6 @@ pub async fn get_latest_tag() -> Result<String> {
     ))
 }
 
-// Gets all the tags for the current repo.
-pub async fn get_all_tags() -> Result<Vec<String>> {
-    let mut cmd = Command::new("git");
-    cmd.args(vec!["tag", "--list"]);
-    let output = cmd.output().await?;
-    if !output.status.success() {
-        bail!(
-            "error getting all tags: {}",
-            String::from_utf8_lossy(&output.stdout).to_string()
-        );
-    }
-    let out = String::from_utf8_lossy(&output.stdout).to_string();
-    Ok(out
-        .split('\n')
-        .map(String::from)
-        .filter(|tag| !tag.is_empty())
-        .collect())
-}
-
 pub async fn get_previous_tag() -> Result<String> {
     // Use HEAD^ so the current tag isn't returned when HEAD is tagged.
     let mut cmd = Command::new("git");
@@ -180,16 +162,13 @@ pub async fn get_all_git_log() -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
-    let latest_tag = get_latest_tag().await?;
-
-    // Try to get the previous tag, use empty string if it fails
-    let prev_tag = get_previous_tag().await.unwrap_or_default();
-
-    let range = if prev_tag.is_empty() {
-        latest_tag.clone() // Use only the latest tag if there's no previous tag
+/// Formats the commits since `meta.previous_tag` (or all commits when there
+/// is none) up to HEAD.
+pub async fn get_changelog(cfg: &Changelog, meta: &TemplateMeta) -> Result<String> {
+    let range = if meta.previous_tag.is_empty() {
+        "HEAD".to_string()
     } else {
-        format!("{}..{}", prev_tag, latest_tag)
+        format!("{}..HEAD", meta.previous_tag)
     };
 
     let mut cmd = Command::new("git");
@@ -258,9 +237,8 @@ pub async fn get_changelog(cfg: &Changelog) -> Result<String> {
         .await
         .wrap_err("error getting changelog formatter")?;
 
-    let template_meta = crate::build_template_meta(latest_tag.clone()).await?;
     fmter
-        .format(&commits, &template_meta)
+        .format(&commits, meta)
         .await
         .wrap_err("error formatting changelog")
 }
