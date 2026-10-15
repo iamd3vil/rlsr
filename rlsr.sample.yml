@@ -32,7 +32,8 @@ releases:
       after:
         - "echo 'Release complete'"
     builds:
-      - command: "cargo build --release"
+      - name: "Linux build"
+        command: "cargo build --release"
         bin_name: "rlsr" # Optional, defaults to the archive name.
         artifact: "./target/release/rlsr" # The artifact to archive and release.
         archive_name: "rlsr-linux-x86_64" # Archive name.
