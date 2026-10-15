@@ -34,7 +34,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Release
-        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           config: rlsr.yml
           publish: true
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           publish: false
 ```
@@ -64,7 +64,7 @@ jobs:
 | `config` | string | `rlsr.yml` | Path to the rlsr config file. |
 | `publish` | string | `false` | Publish artifacts (false passes `--skip-publish`). |
 | `rm_dist` | string | `false` | Remove the dist directory before building. |
-| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.9.0`). |
+| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.10.0`). |
 | `args` | string | `""` | Extra args for `rlsr` (space-separated). |
 | `working_directory` | string | `.` | Working directory to run `rlsr` in. |
 | `github_token` | string | `""` | Token for GitHub API operations. Falls back to `GITHUB_TOKEN`. |
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           working_directory: ./crates/my-tool
           config: rlsr.yml
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           publish: false
 ```
@@ -142,7 +142,7 @@ jobs:
         with:
           fetch-depth: 0
       # Install toolchains here (Rust, zig and cargo-zigbuild for type: rust).
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           args: --split --targets ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
@@ -165,14 +165,14 @@ jobs:
           pattern: dist-*
           path: dist/
           merge-multiple: true
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           publish: true
           args: --merge
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`--split` and `--merge` need an rlsr release newer than v0.9.0. The action installs the latest release by default.
+`--split` and `--merge` need rlsr v0.10.0 or later. The action installs the latest release by default.
 
 Don't pass `rm_dist: true` to the merge job, because it would delete the
 downloaded archives. rlsr refuses `--merge` together with `--rm-dist`.
