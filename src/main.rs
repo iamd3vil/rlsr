@@ -21,6 +21,22 @@ struct Args {
     /// existing artifacts. Release hooks still run.
     #[clap(long)]
     skip_build: bool,
+
+    /// Build and package only, and write a manifest to the dist folder so a
+    /// later --merge run can checksum and publish. For building targets on
+    /// separate CI runners.
+    #[clap(long)]
+    split: bool,
+
+    /// With --split, only run builds whose target is in this comma-separated
+    /// list.
+    #[clap(long, use_value_delimiter = true, requires = "split")]
+    targets: Vec<String>,
+
+    /// Skip hooks and builds; checksum and publish the archives listed in the
+    /// split manifests in the dist folder.
+    #[clap(long, conflicts_with_all = &["split", "skip-build", "rm-dist"])]
+    merge: bool,
 }
 
 #[tokio::main]
@@ -42,6 +58,9 @@ async fn main() -> Result<()> {
         skip_publish: args.skip_publish,
         rm_dist: args.rm_dist,
         skip_build: args.skip_build,
+        split: args.split,
+        merge: args.merge,
+        targets: args.targets,
     };
 
     rlsr::run(cfg, opts).await

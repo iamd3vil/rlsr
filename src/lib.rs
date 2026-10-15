@@ -16,6 +16,7 @@ pub mod config;
 mod go_build;
 mod release_provider;
 mod rust_build;
+mod split;
 mod templating;
 mod utils;
 
@@ -28,6 +29,12 @@ pub struct Opts {
     pub skip_publish: bool,
     pub rm_dist: bool,
     pub skip_build: bool,
+    /// Build and package only, and write a manifest for a later merge run.
+    pub split: bool,
+    /// Skip builds; checksum and publish what split runs produced.
+    pub merge: bool,
+    /// Only run builds for these targets.
+    pub targets: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -265,10 +272,28 @@ async fn run_builds_for_release(
     all_image_tags: Arc<Mutex<Vec<String>>>,
     template_meta: Arc<TemplateMeta>,
     skip_build: bool,
+    targets: &[String],
 ) -> Result<()> {
     info!("Starting builds for release: '{}'", release.name);
 
-    let expanded_builds = expand_builds(release)?;
+    let mut expanded_builds = expand_builds(release)?;
+    if !targets.is_empty() {
+        expanded_builds.retain(|expanded| {
+            expanded
+                .build
+                .target
+                .as_ref()
+                .is_some_and(|target| targets.contains(target))
+        });
+        if expanded_builds.is_empty() {
+            warn!(
+                "No builds in release '{}' match --targets {}",
+                release.name,
+                targets.join(",")
+            );
+            return Ok(());
+        }
+    }
 
     if release.builds_sequential {
         run_builds_sequentially(
@@ -803,6 +828,72 @@ async fn publish_release_artifacts(
     Ok(())
 }
 
+/// Runs the hooks and builds for a release and returns the archives and image
+/// tags they produced.
+async fn build_release(
+    release_config: &Release,
+    opts: &Opts,
+) -> Result<(Vec<String>, Vec<String>)> {
+    // Determine template metadata once per release run
+    let template_meta = get_template_metadata()
+        .await
+        .context("Failed to get template metadata")?;
+
+    // Prepare distribution directory
+    prepare_dist_directory(release_config, opts.rm_dist)
+        .await
+        .with_context(|| format!("Failed preparation for release '{}'", release_config.name))?;
+
+    // Execute before hooks
+    if let Some(hooks) = &release_config.hooks {
+        execute_hooks(
+            &hooks.before,
+            &release_config.env,
+            HookType::Before,
+            template_meta.as_ref(),
+        )
+        .await
+        .with_context(|| format!("Before hooks failed for release '{}'", release_config.name))?;
+    }
+
+    // Run builds
+    let all_archives = Arc::new(Mutex::new(Vec::new()));
+    let all_image_tags = Arc::new(Mutex::new(Vec::new()));
+    run_builds_for_release(
+        release_config,
+        all_archives.clone(),
+        all_image_tags.clone(),
+        template_meta.clone(),
+        opts.skip_build,
+        &opts.targets,
+    )
+    .await
+    .with_context(|| format!("Build process failed for release '{}'", release_config.name))?;
+
+    // Execute after hooks
+    if let Some(hooks) = &release_config.hooks {
+        execute_hooks(
+            &hooks.after,
+            &release_config.env,
+            HookType::After,
+            template_meta.as_ref(),
+        )
+        .await
+        .with_context(|| format!("After hooks failed for release '{}'", release_config.name))?;
+    }
+
+    // Collect archive paths
+    let collected_archives = {
+        let lock = all_archives.lock().await;
+        lock.clone()
+    };
+    let collected_image_tags = {
+        let lock = all_image_tags.lock().await;
+        lock.clone()
+    };
+    Ok((collected_archives, collected_image_tags))
+}
+
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     let mut publish = !opts.skip_publish;
     if opts.skip_publish {
@@ -822,64 +913,42 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
     for release_config in releases.iter() {
         info!("Processing release: '{}'", release_config.name);
 
-        // Determine template metadata once per release run
-        let template_meta = get_template_metadata()
-            .await
-            .context("Failed to get template metadata")?;
-
-        // Prepare distribution directory
-        prepare_dist_directory(release_config, opts.rm_dist)
-            .await
-            .with_context(|| format!("Failed preparation for release '{}'", release_config.name))?;
-
-        // Execute before hooks
-        if let Some(hooks) = &release_config.hooks {
-            execute_hooks(
-                &hooks.before,
-                &release_config.env,
-                HookType::Before,
-                template_meta.as_ref(),
-            )
-            .await
-            .with_context(|| {
-                format!("Before hooks failed for release '{}'", release_config.name)
-            })?;
-        }
-
-        // Run builds
-        let all_archives = Arc::new(Mutex::new(Vec::new()));
-        let all_image_tags = Arc::new(Mutex::new(Vec::new()));
-        run_builds_for_release(
-            release_config,
-            all_archives.clone(),
-            all_image_tags.clone(),
-            template_meta.clone(),
-            opts.skip_build,
-        )
-        .await
-        .with_context(|| format!("Build process failed for release '{}'", release_config.name))?;
-
-        // Execute after hooks
-        if let Some(hooks) = &release_config.hooks {
-            execute_hooks(
-                &hooks.after,
-                &release_config.env,
-                HookType::After,
-                template_meta.as_ref(),
-            )
-            .await
-            .with_context(|| format!("After hooks failed for release '{}'", release_config.name))?;
-        }
-
-        // Collect archive paths
-        let collected_archives = {
-            let lock = all_archives.lock().await;
-            lock.clone()
+        let (collected_archives, collected_image_tags) = if opts.merge {
+            let (archives, image_tags) = split::read_manifests(release_config)
+                .await
+                .with_context(|| format!("Merge failed for release '{}'", release_config.name))?;
+            info!(
+                "Merged {} archives and {} image tags from split runs for release '{}'",
+                archives.len(),
+                image_tags.len(),
+                release_config.name
+            );
+            (archives, image_tags)
+        } else {
+            build_release(release_config, &opts).await?
         };
-        let collected_image_tags = {
-            let lock = all_image_tags.lock().await;
-            lock.clone()
-        };
+
+        if opts.split {
+            if collected_archives.is_empty() && collected_image_tags.is_empty() {
+                warn!(
+                    "No archives or images were produced for release '{}'. Skipping split manifest.",
+                    release_config.name
+                );
+                continue;
+            }
+            let manifest = split::write_manifest(
+                release_config,
+                &opts.targets,
+                &collected_archives,
+                &collected_image_tags,
+            )
+            .await?;
+            info!(
+                "Wrote split manifest {}; checksums and publishing happen in the --merge run.",
+                manifest
+            );
+            continue;
+        }
 
         if collected_archives.is_empty() && collected_image_tags.is_empty() {
             warn!(

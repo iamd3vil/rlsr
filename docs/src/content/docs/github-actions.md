@@ -113,10 +113,15 @@ jobs:
 ### Build on parallel runners
 
 By default rlsr runs every build on one runner. To give each target its own
-runner, build in a matrix, upload the binaries, and run rlsr with
-`--skip-build` in a final job. rlsr then skips the build commands and packages,
-checksums and publishes the binaries found at each build's `artifact` path, so
-`rlsr.yml` stays the same as for local releases.
+runner, run rlsr with `--split --targets <target>` in a build matrix. Each
+runner builds and packages its targets and writes a manifest to `dist/`. A
+final job downloads every runner's `dist/` and runs `rlsr --merge`, which
+checksums and publishes all the archives together. `rlsr.yml` stays the same
+as for local releases.
+
+`--targets` matches each build's `target`: the triple for `type: rust` builds,
+`os/arch` for `type: go` builds, or the `target` field you set on a custom
+build.
 
 ```yaml
 permissions:
@@ -128,22 +133,22 @@ jobs:
       matrix:
         include:
           - name: linux
-            command: just build-linux
-            dir: target/x86_64-unknown-linux-musl/release
-            bin: my-tool
+            target: x86_64-unknown-linux-musl
           - name: windows
-            command: just build-windows
-            dir: target/x86_64-pc-windows-gnu/release
-            bin: my-tool.exe
+            target: x86_64-pc-windows-gnu
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Install toolchains here.
-      - run: ${{ matrix.command }}
+        with:
+          fetch-depth: 0
+      # Install toolchains here (Rust, zig and cargo-zigbuild for type: rust).
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
+        with:
+          args: --split --targets ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
-          path: ${{ matrix.dir }}/${{ matrix.bin }}
+          name: dist-${{ matrix.name }}
+          path: dist/
           if-no-files-found: error
 
   release:
@@ -155,21 +160,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Put each binary back at its `artifact` path from rlsr.yml.
       - uses: actions/download-artifact@v4
         with:
-          name: linux
-          path: target/x86_64-unknown-linux-musl/release
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows
-          path: target/x86_64-pc-windows-gnu/release
+          pattern: dist-*
+          path: dist/
+          merge-multiple: true
       - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.9.0
         with:
           publish: true
-          args: --skip-build
+          args: --merge
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+`--split` and `--merge` need an rlsr release newer than v0.9.0. The action installs the latest release by default.
+
+Don't pass `rm_dist: true` to the merge job, because it would delete the
+downloaded archives. rlsr refuses `--merge` together with `--rm-dist`.
+
+If you build binaries outside rlsr, you can still put them at each build's
+`artifact` path and run rlsr with `--skip-build` in a single final job instead.
 
 ## Local testing with act
 
