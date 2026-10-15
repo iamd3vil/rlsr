@@ -33,8 +33,7 @@ pub async fn create_checksums(rls: &Release, archives: Vec<String>) -> Result<()
             path.file_name().unwrap(),
             &checksum
         );
-        // Write the name and checksum to the file
-        file.write_all(format!("{}\t{}\n", path.file_name().unwrap(), checksum).as_bytes())
+        file.write_all(checksum_line(&checksum, path.file_name().unwrap()).as_bytes())
             .await
             .wrap_err_with(|| "error writing checksums to file")?;
 
@@ -42,4 +41,23 @@ pub async fn create_checksums(rls: &Release, archives: Vec<String>) -> Result<()
     }
 
     Ok(())
+}
+
+/// Formats a line the way sha256sum and friends do, so `sha256sum -c` can
+/// check the file.
+fn checksum_line(checksum: &str, file_name: &str) -> String {
+    format!("{}  {}\n", checksum, file_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checksum_line_matches_coreutils_format() {
+        assert_eq!(
+            checksum_line("abc123", "app-linux-amd64.zip"),
+            "abc123  app-linux-amd64.zip\n"
+        );
+    }
 }

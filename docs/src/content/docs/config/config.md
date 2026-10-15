@@ -103,6 +103,12 @@ The `checksum` section allows you to specify the algorithm used for generating c
 
 Supported algorithms: `sha256`, `sha512`, `sha3_256`, `sha3_512`, `blake2b`, `blake2s`, `md5`, `sha1`.
 
+Checksums are written to `checksums.txt` in the dist folder, one `<checksum>  <file name>` line per archive, the same format `sha256sum` and similar tools write. Users can verify downloads with the matching tool, for example:
+
+```sh
+sha256sum --check --ignore-missing checksums.txt
+```
+
 ### Additional Files
 
 You can specify a list of extra files to include with all builds:
