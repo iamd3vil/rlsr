@@ -34,12 +34,12 @@ OPTIONS:
     -c, --config <CONFIG>     [default: rlsr.yml]
     -h, --help                Print help information
     -s, --skip-publish         Skip publishing release artifacts
-        --skip-build          Skip build commands and hooks; package existing artifacts
+        --skip-build          Skip build commands and per-build hooks; package existing artifacts
         --rm-dist             Remove dist folder before building
     -V, --version             Print version information
 ```
 
-If `--skip-publish` is set, `rlsr` will build but not publish. `--rm-dist` cleans the dist folder before building the release again. `--skip-build` skips each build's command and hooks and packages the files already at the configured `artifact` paths, for when binaries were built elsewhere (for example, on parallel CI runners).
+If `--skip-publish` is set, `rlsr` will build but not publish. `--rm-dist` cleans the dist folder before building the release again. `--skip-build` skips each build's command, `prehook` and `posthook` and packages the files already at the configured `artifact` paths, for when binaries were built elsewhere (for example, on parallel CI runners). Release-level `hooks` still run.
 
 ## Configuration
 

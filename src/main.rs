@@ -17,7 +17,8 @@ struct Args {
     #[clap(short, long)]
     skip_publish: bool,
 
-    /// Skip build commands and hooks; package and publish existing artifacts.
+    /// Skip each build's command, prehook and posthook; package and publish
+    /// existing artifacts. Release hooks still run.
     #[clap(long)]
     skip_build: bool,
 }

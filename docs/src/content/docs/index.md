@@ -28,7 +28,7 @@ OPTIONS:
 
 If `--skip-publish` flag is given, `rlsr` will skip publishing. `rm-dist` flag cleans the dist folder before building the release again.
 
-`--skip-build` skips each build's command, `prehook` and `posthook`, and packages the files already at the configured `artifact` paths. Use it when the binaries were built elsewhere, such as on [parallel CI runners](/github-actions/#build-on-parallel-runners). Buildx builds aren't supported with `--skip-build`.
+`--skip-build` skips each build's command, `prehook` and `posthook`, and packages the files already at the configured `artifact` paths. Use it when the binaries were built elsewhere, such as on [parallel CI runners](/github-actions/#build-on-parallel-runners). Release-level `hooks` still run. Buildx builds aren't supported with `--skip-build`.
 
 ## Configuration 🔧
 
