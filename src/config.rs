@@ -297,6 +297,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_sample_config_parses() {
+        let cfg = parse_config("rlsr.sample.yml").expect("rlsr.sample.yml should parse");
+        assert!(!cfg.releases.is_empty());
+        assert!(cfg.snapshot.is_some());
+    }
+
+    #[test]
     fn test_build_target_fields_deserialize() {
         let yaml = r#"
 releases:
