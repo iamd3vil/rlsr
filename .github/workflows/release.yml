@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   # Each target builds on its own runner with `rlsr --split`; the release job
-  # merges the results with `rlsr --merge`. rlsr runs from this commit, so a
-  # release is built with its own code.
+  # merges the results with `rlsr --merge`. The action installs the latest
+  # released rlsr.
   build:
     strategy:
       matrix:
@@ -52,7 +52,9 @@ jobs:
         uses: taiki-e/install-action@cargo-zigbuild
 
       - name: Build and package
-        run: cargo run --release --locked -- --split --skip-publish --targets ${{ matrix.target }}
+        uses: ./.github/actions/rlsr
+        with:
+          args: --split --targets ${{ matrix.target }}
 
       - name: Upload dist
         uses: actions/upload-artifact@v4
@@ -81,13 +83,9 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      # The released rlsr has no --merge until v0.10.0, so run the Linux
-      # binary the build job just made instead of compiling rlsr again.
       - name: Checksum and publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SKIP_PUBLISH: ${{ github.event_name != 'push' && '--skip-publish' || '' }}
-        run: |
-          rlsr=$(ls dist/rlsr-*-linux-x86_64)
-          chmod +x "$rlsr"
-          "$rlsr" --merge $SKIP_PUBLISH
+        uses: ./.github/actions/rlsr
+        with:
+          publish: ${{ github.event_name == 'push' }}
+          args: --merge
+          github_token: ${{ secrets.GITHUB_TOKEN }}
