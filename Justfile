@@ -50,5 +50,26 @@ build-windows $RUSTFLAGS="-C target-feature=+crt-static" $CARGO_TARGET_DIR="targ
     ghcr.io/rust-cross/cargo-zigbuild:latest \
     sh -c 'rustup update stable && rustup target add x86_64-pc-windows-gnu && cargo zigbuild --release --target x86_64-pc-windows-gnu'
 
+# Tool for the macOS build in rlsr.yml, which appends `--target <triple> <flags>`.
+# Linking for macOS needs the macOS SDK, so use cargo on a Mac and the
+# cargo-zigbuild image, which ships the SDK, everywhere else.
+cargo-macos *ARGS:
+    #!/usr/bin/env sh
+    set -eu
+    if [ "$(uname)" = "Darwin" ]; then
+        exec cargo build {{ARGS}}
+    fi
+    # Run as the current user so target/ doesn't end up owned by root. The
+    # image already has the macOS targets installed.
+    exec docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --volume "$PWD":/io \
+        --workdir /io \
+        -e HOME=/tmp \
+        -e CARGO_HOME=/io/target/docker-cargo-home \
+        -e CARGO_TARGET_DIR \
+        ghcr.io/rust-cross/cargo-zigbuild:latest \
+        cargo zigbuild {{ARGS}}
+
 docs-serve:
     cd docs && npm run dev && cd ../

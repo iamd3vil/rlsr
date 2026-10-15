@@ -25,14 +25,15 @@ releases:
           targets:
             - "x86_64-unknown-linux-musl"
             - "x86_64-pc-windows-gnu"
-      # Linking for macOS needs the macOS SDK, so this one builds on a Mac.
+      # Linking for macOS needs the macOS SDK; `just cargo-macos` builds with
+      # cargo on a Mac and in the cargo-zigbuild image elsewhere.
       - name: "rlsr"
         type: "rust"
         archive_name: "rlsr-{{ meta.tag }}-macos-{{ meta.arch }}"
         env:
           - "CARGO_TARGET_DIR=target/{{ meta.target }}"
         rust:
-          tool: "cargo build"
+          tool: "just cargo-macos"
           targets:
             - "aarch64-apple-darwin"
 changelog:

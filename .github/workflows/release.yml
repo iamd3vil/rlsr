@@ -51,6 +51,11 @@ jobs:
         if: runner.os == 'Linux'
         uses: taiki-e/install-action@cargo-zigbuild
 
+      # rlsr.yml builds macOS with `just cargo-macos`.
+      - name: Install just
+        if: runner.os == 'macOS'
+        uses: taiki-e/install-action@just
+
       - name: Build and package
         uses: ./.github/actions/rlsr
         with:
