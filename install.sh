@@ -4,9 +4,12 @@ set -e
 
 echo "Starting RLSR installation script..."
 
-# Function to get the latest release version
+# Function to get the latest release version. Follows the releases/latest
+# redirect; the unauthenticated API is rate limited on shared IPs.
 get_latest_version() {
-    curl -s https://api.github.com/repos/iamd3vil/rlsr/releases/latest | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p'
+    local latest_url
+    latest_url="$(curl -sSfI -o /dev/null -w '%{redirect_url}' https://github.com/iamd3vil/rlsr/releases/latest)"
+    echo "${latest_url##*/}"
 }
 
 # Detect OS and architecture
@@ -31,6 +34,10 @@ fi
 # Get the latest version
 echo "Fetching latest release version from GitHub..."
 VERSION=$(get_latest_version)
+if [[ -z "$VERSION" ]]; then
+    echo "Error: could not determine the latest rlsr version."
+    exit 1
+fi
 echo "Latest version: ${VERSION}"
 
 # Construct the download URL
@@ -44,7 +51,7 @@ echo "Temporary directory created: ${TMP_DIR}"
 
 # Download the zip file
 echo "Downloading rlsr ${VERSION}..."
-curl -L -o "${TMP_DIR}/rlsr.zip" "${DOWNLOAD_URL}"
+curl -fL -o "${TMP_DIR}/rlsr.zip" "${DOWNLOAD_URL}"
 echo "Download completed."
 
 # Unzip the file
