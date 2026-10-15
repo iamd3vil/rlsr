@@ -37,6 +37,8 @@ targets:
 
 If a release for the tag already exists, including a draft, rlsr uploads to it instead of creating a new one, and leaves its title, notes and draft/prerelease state alone. This lets you write the release notes in GitHub first, or rerun a publish that failed partway. On a rerun, set `replace_existing_assets: true` to replace the assets that were already uploaded.
 
+Each asset upload is tried up to 3 times. If some uploads still fail, rlsr reports all of them and exits with an error after the other uploads finish.
+
 Tags with a semver prerelease part, such as `v1.2.0-rc.1`, are published as GitHub prereleases, so they don't become the repository's latest release.
 
 ### Important Note

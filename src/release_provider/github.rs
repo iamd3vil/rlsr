@@ -4,14 +4,16 @@ use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use crate::{build_template_meta, templating};
 use async_trait::async_trait;
 use camino::Utf8Path;
-use color_eyre::eyre::{bail, Context, Result};
-use log::{debug, error, info};
+use color_eyre::eyre::{bail, Context, ContextCompat, Result};
+use log::{debug, error, info, warn};
 use reqwest::{Body, Client};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs;
 use tokio_util::codec::{BytesCodec, FramedRead};
 
 const MEDIA_TYPE: &str = "application/vnd.github.v3+json";
+const UPLOAD_ATTEMPTS: u64 = 3;
 
 #[async_trait]
 impl ReleaseProvider for Github {
@@ -98,30 +100,28 @@ impl Github {
                 );
             }
             info!("replacing existing asset {}", asset.name);
-            let route = format!(
-                "/repos/{}/{}/releases/assets/{}",
-                gh.owner, gh.repo, asset.id
-            );
-            let res = ghclient
-                ._delete(route, None::<&()>)
-                .await
-                .context("error deleting existing asset")?;
-            octocrab::map_github_error(res)
+            delete_asset(&ghclient, &gh.owner, &gh.repo, asset.id.0)
                 .await
                 .with_context(|| format!("error deleting existing asset {}", asset.name))?;
         }
 
-        Self::upload_archives(
-            files,
-            gh_release.id.0,
-            gh.owner.clone(),
-            gh.repo.clone(),
+        let uploader = Arc::new(Uploader {
+            ghclient,
+            http: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::limited(100))
+                .build()?,
+            owner: gh.owner.clone(),
+            repo: gh.repo.clone(),
+            release_id: gh_release.id.0,
             ghtoken,
-        )
-        .await
-        .context("uploading archives")?;
+        });
+        let num_files = files.len();
+        uploader
+            .upload_all(files)
+            .await
+            .context("uploading archives")?;
 
-        info!("release created");
+        info!("uploaded {} files to release {}", num_files, latest_tag);
         Ok(())
     }
 
@@ -180,83 +180,119 @@ impl Github {
         info!("release created");
         Ok(created)
     }
+}
 
-    async fn upload_archives(
-        archives: Vec<String>,
-        release_id: u64,
-        owner: String,
-        repo: String,
-        ghtoken: String,
-    ) -> Result<()> {
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(100))
-            .build()?;
-        let client = Arc::new(client);
-        let mut all_uploads = vec![];
-        let num = archives.len();
-        let archives = Arc::new(archives);
-        for i in 0..num {
-            let archives = archives.clone();
-            let filename = String::from(Utf8Path::new(&archives[i]).file_name().unwrap());
+/// Uploads files to one release. Shared by the upload tasks.
+struct Uploader {
+    ghclient: octocrab::Octocrab,
+    http: Client,
+    owner: String,
+    repo: String,
+    release_id: u64,
+    ghtoken: String,
+}
 
-            let upload_owner = owner.clone();
-            let upload_ghtoken = ghtoken.clone();
-            let ghclient = client.clone();
-            let upload_url = format!(
-                "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
-                upload_owner, repo, release_id, filename
-            );
-            all_uploads.push(tokio::spawn(async move {
-                debug!("uploading to url: {}", upload_url);
-                let res = Self::upload_file(
-                    upload_url,
-                    archives[i].clone(),
-                    ghclient,
-                    upload_owner,
-                    upload_ghtoken,
-                )
-                .await;
-                if let Err(err) = res {
-                    error!("error uploading archive {}: {}", archives[i], err);
-                    std::process::exit(1);
+impl Uploader {
+    /// Uploads all files in parallel and reports every failure.
+    async fn upload_all(self: Arc<Self>, files: Vec<String>) -> Result<()> {
+        let total = files.len();
+        let tasks = files.into_iter().map(|file| {
+            let uploader = self.clone();
+            tokio::spawn(async move {
+                uploader
+                    .upload_with_retry(&file)
+                    .await
+                    .with_context(|| format!("error uploading {}", file))
+            })
+        });
+
+        let mut failures = Vec::new();
+        for result in futures::future::join_all(tasks).await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) => {
+                    error!("{:?}", err);
+                    failures.push(format!("{:?}", err));
                 }
-            }));
+                Err(err) => failures.push(format!("upload task panicked: {}", err)),
+            }
         }
-        futures::future::join_all(all_uploads).await;
+        if !failures.is_empty() {
+            bail!(
+                "{} of {} uploads failed:\n{}",
+                failures.len(),
+                total,
+                failures.join("\n")
+            );
+        }
         Ok(())
     }
 
-    async fn upload_file(
-        url: String,
-        filepath: String,
-        ghclient: Arc<Client>,
-        owner: String,
-        ghtoken: String,
-    ) -> Result<()> {
+    async fn upload_with_retry(&self, file: &str) -> Result<()> {
+        let name = Utf8Path::new(file)
+            .file_name()
+            .with_context(|| format!("no file name in {}", file))?;
+        let mut attempt = 1;
+        loop {
+            let err = match self.upload_file(file, name).await {
+                Ok(()) => return Ok(()),
+                Err(err) => err,
+            };
+            if attempt == UPLOAD_ATTEMPTS {
+                return Err(err);
+            }
+            warn!(
+                "uploading {} failed (attempt {} of {}), retrying: {:?}",
+                name, attempt, UPLOAD_ATTEMPTS, err
+            );
+            tokio::time::sleep(Duration::from_secs(2 * attempt)).await;
+            // A failed upload can leave a broken asset with this name behind,
+            // which would make the retry fail.
+            self.delete_asset_named(name).await?;
+            attempt += 1;
+        }
+    }
+
+    async fn delete_asset_named(&self, name: &str) -> Result<()> {
+        let assets = self
+            .ghclient
+            .repos(&self.owner, &self.repo)
+            .releases()
+            .assets(self.release_id)
+            .per_page(100)
+            .send()
+            .await
+            .context("error listing release assets")?;
+        if let Some(asset) = assets.items.into_iter().find(|a| a.name == name) {
+            debug!("deleting leftover asset {}", name);
+            delete_asset(&self.ghclient, &self.owner, &self.repo, asset.id.0).await?;
+        }
+        Ok(())
+    }
+
+    async fn upload_file(&self, filepath: &str, name: &str) -> Result<()> {
+        let url = format!(
+            "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
+            self.owner, self.repo, self.release_id, name
+        );
+        debug!("uploading to url: {}", url);
+
         // Stat the file to get the size of the file.
-        let meta = fs::metadata(&filepath)
+        let meta = fs::metadata(filepath)
             .await
             .context("error getting file metadata")?;
         let size = meta.len();
 
-        // Guess mime.
-        let mime_type = match infer::get_from_path(&filepath)? {
+        let mime_type = match infer::get_from_path(filepath)? {
             Some(mime_type) => mime_type.to_string(),
-            None => {
-                String::from("application/octet-stream")
-                // let ext = Utf8Path::new(&filepath).extension();
-                // if ext.is_some() && ext.unwrap() == "txt" {
-                //     String::from("text/plain")
-                // } else {
-                // }
-            }
+            None => String::from("application/octet-stream"),
         };
 
-        // Open file.
-        let f = tokio::fs::File::open(&filepath).await?;
-        let res = ghclient
+        let f = tokio::fs::File::open(filepath).await?;
+        let res = self
+            .http
             .post(url)
-            .basic_auth(owner, Some(ghtoken))
+            .basic_auth(&self.owner, Some(&self.ghtoken))
             .body(file_to_body(f))
             .header("Content-Length", size)
             .header("Content-Type", mime_type)
@@ -274,6 +310,23 @@ impl Github {
 
         Ok(())
     }
+}
+
+async fn delete_asset(
+    ghclient: &octocrab::Octocrab,
+    owner: &str,
+    repo: &str,
+    asset_id: u64,
+) -> Result<()> {
+    let route = format!("/repos/{}/{}/releases/assets/{}", owner, repo, asset_id);
+    let res = ghclient
+        ._delete(route, None::<&()>)
+        .await
+        .context("error deleting asset")?;
+    octocrab::map_github_error(res)
+        .await
+        .context("error deleting asset")?;
+    Ok(())
 }
 
 fn uploads_file_named(files: &[String], name: &str) -> bool {
