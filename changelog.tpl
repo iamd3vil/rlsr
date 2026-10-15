@@ -1,38 +1,12 @@
-{% set features = commits | selectattr("type", "equalto", "feat") | list %}
-{% set fixes = commits | selectattr("type", "equalto", "fix") | list %}
-{% set chores = commits | selectattr("type", "equalto", "chore") | list %}
+{#- Notes files are rendered as templates: wrap literal {{ or {% in {% raw %}.
+    github_notes only lists merged PRs, so commits pushed directly are listed here. -#}
+{% include "release-notes/" ~ meta.tag ~ ".md" ignore missing %}
+{% for commit in commits if not commit.subject | match("\\(#[0-9]+\\)$") %}
+{% if loop.first %}
 
-{% if features | length > 0 %}
-### Features:
-{% for commit in features %}
-{{ commit.hash }}: {{ commit.subject }}{% if commit.handle %} (@{{ commit.handle }}){% endif %}
-{%- endfor %}
+## Commits
 {% endif %}
-
-{% if fixes | length > 0 %}
-### Fixes:
-{% for commit in fixes %}
-{{ commit.hash }}: {{ commit.subject }}{% if commit.handle %} (@{{ commit.handle }}){% endif %}
-{%- endfor %}
-{% endif %}
-
-{% if chores | length > 0 %}
-### Chores:
-{% for commit in chores %}
-{{ commit.hash }}: {{ commit.subject }}{% if commit.handle %} (@{{ commit.handle }}){% endif %}
-{%- endfor %}
-{% endif %}
-
-{% set contributors = [] %}
-{% for commit in commits %}
-{% if commit.handle and commit.handle not in contributors %}
-{% set contributors = contributors + [commit.handle] %}
-{% endif %}
+* {{ commit.subject }}{% if commit.handle %} by @{{ commit.handle }}{% endif %} in {{ commit.hash }}
 {% endfor %}
 
-{% if contributors | length > 0 %}
-### Contributors:
-{% for handle in contributors %}
-- @{{ handle }}
-{%- endfor %}
-{% endif %}
+{{ github_notes }}
