@@ -10,6 +10,8 @@ releases:
         repo: "rlsr"
         draft: false # Create the release as a draft.
         name: "rlsr {{ meta.tag }}" # Release title, defaults to the tag.
+        # Replace same-named assets when the release already exists.
+        replace_existing_assets: false
       gitlab:
         owner: "namespace" # or username
         repo: "project-name"

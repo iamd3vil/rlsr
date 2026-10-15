@@ -30,6 +30,10 @@ pub struct Github {
 
     /// Release title template; defaults to the tag.
     pub name: Option<String>,
+
+    /// Replace assets with the same name when the release already exists.
+    #[serde(default)]
+    pub replace_existing_assets: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

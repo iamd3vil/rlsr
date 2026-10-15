@@ -1,4 +1,4 @@
-use crate::config::{Changelog, Release};
+use crate::config::{Changelog, Github as GithubConfig, Release};
 use crate::release_provider::ReleaseProvider;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
 use crate::{build_template_meta, templating};
@@ -68,57 +68,55 @@ impl Github {
             .personal_token(ghtoken.clone())
             .build()?;
 
-        // Get changelog.
-        let tags = get_all_tags().await?;
-        let changelog = if tags.len() == 1 {
-            get_all_git_log().await?
-        } else {
-            get_changelog(&self.changelog).await?
-        };
-
-        // Tags like v1.0.0-rc.1 shouldn't become the repo's latest release.
-        let prerelease = !crate::parse_version_meta(&latest_tag).prerelease.is_empty();
-        let name = match &gh.name {
-            Some(name) => {
-                let meta = build_template_meta(latest_tag.clone()).await?;
-                templating::render_template(name, &meta)
+        let gh_release = match Self::find_release(&ghclient, gh, &latest_tag).await? {
+            Some(existing) => {
+                info!("release for {} already exists, uploading to it", latest_tag);
+                existing
             }
-            None => latest_tag.clone(),
+            None => self.create_release(&ghclient, gh, &latest_tag).await?,
         };
 
-        let res = ghclient
-            .repos(&gh.owner, &gh.repo)
-            .releases()
-            .create(&latest_tag)
-            .name(&name)
-            .body(&changelog)
-            .draft(gh.draft)
-            .prerelease(prerelease)
-            .send()
-            .await
-            .context("error creating release in github")?;
-
-        let release_id = res.id.0;
-        let github = release.targets.github.clone();
-        let (owner, repo) = match github {
-            Some(gh) => (gh.owner, gh.repo),
-            None => bail!("couldn't find github details to publish release"),
-        };
-        let ghtoken = ghtoken.clone();
-        let mut checksum_path = Utf8Path::new(&release.dist_folder)
-            .join("checksums.txt")
-            .to_string();
-        if release.checksum.is_none() {
-            checksum_path = String::from("");
+        let mut files = all_archives;
+        if release.checksum.is_some() {
+            files.push(
+                Utf8Path::new(&release.dist_folder)
+                    .join("checksums.txt")
+                    .to_string(),
+            );
         }
-        // Upload all archives.
+
+        // Settle name clashes with existing assets before uploading anything.
+        for asset in &gh_release.assets {
+            if !uploads_file_named(&files, &asset.name) {
+                continue;
+            }
+            if !gh.replace_existing_assets {
+                bail!(
+                    "release {} already has an asset named {}; set replace_existing_assets: true to replace it",
+                    latest_tag,
+                    asset.name
+                );
+            }
+            info!("replacing existing asset {}", asset.name);
+            let route = format!(
+                "/repos/{}/{}/releases/assets/{}",
+                gh.owner, gh.repo, asset.id
+            );
+            let res = ghclient
+                ._delete(route, None::<&()>)
+                .await
+                .context("error deleting existing asset")?;
+            octocrab::map_github_error(res)
+                .await
+                .with_context(|| format!("error deleting existing asset {}", asset.name))?;
+        }
+
         Self::upload_archives(
-            all_archives,
-            release_id,
-            owner,
-            repo,
+            files,
+            gh_release.id.0,
+            gh.owner.clone(),
+            gh.repo.clone(),
             ghtoken,
-            checksum_path,
         )
         .await
         .context("uploading archives")?;
@@ -127,13 +125,68 @@ impl Github {
         Ok(())
     }
 
+    /// Finds the release for a tag, including drafts, which have no tag yet
+    /// and so can't be looked up by tag directly.
+    async fn find_release(
+        ghclient: &octocrab::Octocrab,
+        gh: &GithubConfig,
+        tag: &str,
+    ) -> Result<Option<octocrab::models::repos::Release>> {
+        let releases = ghclient
+            .repos(&gh.owner, &gh.repo)
+            .releases()
+            .list()
+            .per_page(100)
+            .send()
+            .await
+            .context("error listing releases in github")?;
+        Ok(releases.items.into_iter().find(|r| r.tag_name == tag))
+    }
+
+    async fn create_release(
+        &self,
+        ghclient: &octocrab::Octocrab,
+        gh: &GithubConfig,
+        tag: &str,
+    ) -> Result<octocrab::models::repos::Release> {
+        let tags = get_all_tags().await?;
+        let changelog = if tags.len() == 1 {
+            get_all_git_log().await?
+        } else {
+            get_changelog(&self.changelog).await?
+        };
+
+        // Tags like v1.0.0-rc.1 shouldn't become the repo's latest release.
+        let prerelease = !crate::parse_version_meta(tag).prerelease.is_empty();
+        let name = match &gh.name {
+            Some(name) => {
+                let meta = build_template_meta(tag.to_string()).await?;
+                templating::render_template(name, &meta)
+            }
+            None => tag.to_string(),
+        };
+
+        let created = ghclient
+            .repos(&gh.owner, &gh.repo)
+            .releases()
+            .create(tag)
+            .name(&name)
+            .body(&changelog)
+            .draft(gh.draft)
+            .prerelease(prerelease)
+            .send()
+            .await
+            .context("error creating release in github")?;
+        info!("release created");
+        Ok(created)
+    }
+
     async fn upload_archives(
         archives: Vec<String>,
         release_id: u64,
         owner: String,
         repo: String,
         ghtoken: String,
-        checksum_path: String,
     ) -> Result<()> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(100))
@@ -169,32 +222,6 @@ impl Github {
                 }
             }));
         }
-        // Upload checksum.
-        if !checksum_path.is_empty() {
-            debug!("uploading checksums file");
-            let ghclient = client.clone();
-            let checksum_owner = owner.clone();
-            let checksum_ghtoken = ghtoken.clone();
-            let upload_url = format!(
-                "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
-                checksum_owner, repo, release_id, "checksums.txt",
-            );
-            all_uploads.push(tokio::spawn(async move {
-                let res = Self::upload_file(
-                    upload_url,
-                    checksum_path.clone(),
-                    ghclient,
-                    checksum_owner,
-                    checksum_ghtoken,
-                )
-                .await;
-                if let Err(err) = res {
-                    error!("error uploading checksum file {}: {}", checksum_path, err);
-                    std::process::exit(1);
-                }
-            }))
-        }
-
         futures::future::join_all(all_uploads).await;
         Ok(())
     }
@@ -249,7 +276,30 @@ impl Github {
     }
 }
 
+fn uploads_file_named(files: &[String], name: &str) -> bool {
+    files
+        .iter()
+        .any(|file| Utf8Path::new(file).file_name() == Some(name))
+}
+
 fn file_to_body(file: tokio::fs::File) -> Body {
     let stream = FramedRead::new(file, BytesCodec::new());
     Body::wrap_stream(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uploads_file_named_matches_file_names() {
+        let files = vec![
+            "dist/app-linux-amd64.zip".to_string(),
+            "dist/checksums.txt".to_string(),
+        ];
+        assert!(uploads_file_named(&files, "checksums.txt"));
+        assert!(uploads_file_named(&files, "app-linux-amd64.zip"));
+        assert!(!uploads_file_named(&files, "dist"));
+        assert!(!uploads_file_named(&files, "app-darwin-arm64.zip"));
+    }
 }
