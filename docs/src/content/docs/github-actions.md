@@ -34,7 +34,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Release
-        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+        uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           config: rlsr.yml
           publish: true
@@ -42,7 +42,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Build only (no publish), for example on pull requests. Untagged commits need `--snapshot` (rlsr after v0.10.0):
+Build only (no publish), for example on pull requests. Untagged commits need `--snapshot` (rlsr v0.11.0 or later):
 
 ```yaml
 jobs:
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           publish: false
           args: --snapshot
@@ -65,7 +65,7 @@ jobs:
 | `config` | string | `rlsr.yml` | Path to the rlsr config file. |
 | `publish` | string | `false` | Publish artifacts (false passes `--skip-publish`). |
 | `rm_dist` | string | `false` | Remove the dist directory before building. |
-| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.10.0`). |
+| `rlsr_version` | string | `latest` | Version tag to install (example: `v0.11.0`). |
 | `args` | string | `""` | Extra args for `rlsr` (space-separated). |
 | `working_directory` | string | `.` | Working directory to run `rlsr` in. |
 | `github_token` | string | `""` | Token for GitHub API operations. Falls back to `GITHUB_TOKEN`. |
@@ -74,7 +74,7 @@ jobs:
 
 - Publishing needs a tag and a clean repo; otherwise `rlsr` skips publish.
 - Use `actions/checkout` with `fetch-depth: 0` so tags are available for changelogs.
-- Supported runners: Linux x86_64, Linux arm64 (rlsr releases after v0.10.0) and macOS arm64.
+- Supported runners: Linux x86_64, Linux arm64 (rlsr v0.11.0 or later) and macOS arm64.
 - Use `rlsr_version` to pin a known version instead of `latest`.
 
 ## Advanced examples
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           working_directory: ./crates/my-tool
           config: rlsr.yml
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           publish: false
 ```
@@ -131,14 +131,14 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           publish: true
           args: --nightly
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`fetch-tags` is needed so rlsr can see where the nightly tag points. `--nightly` needs rlsr after v0.10.0.
+`fetch-tags` is needed so rlsr can see where the nightly tag points. `--nightly` needs rlsr v0.11.0 or later.
 
 ### Build on parallel runners
 
@@ -172,7 +172,7 @@ jobs:
         with:
           fetch-depth: 0
       # Install toolchains here (Rust, zig and cargo-zigbuild for type: rust).
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           args: --split --targets ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
@@ -195,7 +195,7 @@ jobs:
           pattern: dist-*
           path: dist/
           merge-multiple: true
-      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.11.0
         with:
           publish: true
           args: --merge
