@@ -4,9 +4,61 @@ on:
   push:
     tags:
       - "v*"
+  # Manual runs build and package everything but never publish.
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
+  # Each target builds on its own runner; the release job packages the results.
+  build:
+    strategy:
+      matrix:
+        include:
+          - name: linux
+            recipe: build-linux
+            dir: target/x86_64-unknown-linux-musl/release
+            bin: rlsr
+          - name: macos
+            recipe: build-macos
+            dir: target/macos/aarch64-apple-darwin/release
+            bin: rlsr
+          - name: windows
+            recipe: build-windows
+            dir: target/windows/x86_64-pc-windows-gnu/release
+            bin: rlsr.exe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        if: matrix.name == 'linux'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        if: matrix.name == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Build
+        run: just ${{ matrix.recipe }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.dir }}/${{ matrix.bin }}
+          if-no-files-found: error
+          retention-days: 1
+
   release:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,21 +69,30 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # Put each binary back at its `artifact` path from rlsr.yml.
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
         with:
-          targets: x86_64-unknown-linux-musl
+          name: linux
+          path: target/x86_64-unknown-linux-musl/release
 
-      - name: Install just
-        uses: taiki-e/install-action@just
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: target/macos/aarch64-apple-darwin/release
 
-      - name: Install musl tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: target/windows/x86_64-pc-windows-gnu/release
 
       - name: Release
         uses: ./.github/actions/rlsr
         with:
           config: rlsr.yml
-          publish: true
+          publish: ${{ github.event_name == 'push' }}
           rm_dist: true
+          args: --skip-build
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -119,6 +119,9 @@ checksums and publishes the binaries found at each build's `artifact` path, so
 `rlsr.yml` stays the same as for local releases.
 
 ```yaml
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -127,9 +130,11 @@ jobs:
           - name: linux
             command: just build-linux
             dir: target/x86_64-unknown-linux-musl/release
+            bin: my-tool
           - name: windows
             command: just build-windows
             dir: target/x86_64-pc-windows-gnu/release
+            bin: my-tool.exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +143,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ matrix.dir }}/my-tool*
+          path: ${{ matrix.dir }}/${{ matrix.bin }}
           if-no-files-found: error
 
   release:
