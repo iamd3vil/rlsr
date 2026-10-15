@@ -13,7 +13,7 @@ permissions:
 jobs:
   # Each target builds on its own runner with `rlsr --split`; the release job
   # merges the results with `rlsr --merge`. The action installs the latest
-  # released rlsr.
+  # released rlsr. Manual runs build untagged commits, so they add --snapshot.
   build:
     strategy:
       matrix:
@@ -62,7 +62,7 @@ jobs:
       - name: Build and package
         uses: ./.github/actions/rlsr
         with:
-          args: --split --targets ${{ matrix.target }}
+          args: --split --targets ${{ matrix.target }} ${{ github.event_name != 'push' && '--snapshot' || '' }}
 
       - name: Upload dist
         uses: actions/upload-artifact@v4
@@ -91,14 +91,9 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      # v0.10.0 takes the nightly tag for the previous release, which would
-      # cut the changelog short, so publish with the Linux binary this
-      # workflow just built. Back to the action once v0.11.0 is out.
       - name: Checksum and publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SNAPSHOT: ${{ github.event_name != 'push' && '--snapshot' || '' }}
-        run: |
-          rlsr=$(ls dist/rlsr-*-linux-x86_64)
-          chmod +x "$rlsr"
-          "$rlsr" --merge $SNAPSHOT
+        uses: ./.github/actions/rlsr
+        with:
+          publish: ${{ github.event_name == 'push' }}
+          args: --merge ${{ github.event_name != 'push' && '--snapshot' || '' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
