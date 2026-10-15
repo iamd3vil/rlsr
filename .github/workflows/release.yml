@@ -91,9 +91,14 @@ jobs:
           path: dist/
           merge-multiple: true
 
+      # v0.10.0 takes the nightly tag for the previous release, which would
+      # cut the changelog short, so publish with the Linux binary this
+      # workflow just built. Back to the action once v0.11.0 is out.
       - name: Checksum and publish
-        uses: ./.github/actions/rlsr
-        with:
-          publish: ${{ github.event_name == 'push' }}
-          args: --merge
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SNAPSHOT: ${{ github.event_name != 'push' && '--snapshot' || '' }}
+        run: |
+          rlsr=$(ls dist/rlsr-*-linux-x86_64)
+          chmod +x "$rlsr"
+          "$rlsr" --merge $SNAPSHOT
