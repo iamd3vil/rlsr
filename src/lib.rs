@@ -83,7 +83,7 @@ pub struct VersionMeta {
     pub prerelease: String,
 }
 
-fn parse_version_meta(tag: &str) -> VersionMeta {
+pub(crate) fn parse_version_meta(tag: &str) -> VersionMeta {
     // Allow v/V-prefixed tags; non-semver tags fall back to empty version fields.
     let version_str = tag
         .strip_prefix('v')

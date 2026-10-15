@@ -29,6 +29,8 @@ targets:
 - `owner`: The GitHub username or organization name where the repository is hosted.
 - `repo`: The name of the GitHub repository.
 
+Tags with a semver prerelease part, such as `v1.2.0-rc.1`, are published as GitHub prereleases, so they don't become the repository's latest release.
+
 ### Important Note
 
 To release to GitHub, you must set the `GITHUB_TOKEN` environment variable with a valid GitHub Personal Access Token. This token is used to authenticate and perform release operations on your GitHub repository.

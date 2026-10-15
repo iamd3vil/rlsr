@@ -75,11 +75,15 @@ impl Github {
             get_changelog(&self.changelog).await?
         };
 
+        // Tags like v1.0.0-rc.1 shouldn't become the repo's latest release.
+        let prerelease = !crate::parse_version_meta(&latest_tag).prerelease.is_empty();
+
         let res = ghclient
             .repos(&gh.owner, &gh.repo)
             .releases()
             .create(&latest_tag)
             .body(&changelog)
+            .prerelease(prerelease)
             .send()
             .await
             .context("error creating release in github")?;
