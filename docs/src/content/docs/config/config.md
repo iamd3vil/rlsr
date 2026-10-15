@@ -255,6 +255,19 @@ Supported `buildx` keys:
 - `ssh`: SSH agent forward specs.
 - `annotations`: Map of image annotations.
 
+## Snapshot
+
+`rlsr --snapshot` builds and packages without a release tag and never publishes. Use it to test the release locally or in CI on untagged commits; without it, rlsr requires a clean working tree and a tag on HEAD.
+
+```yaml
+snapshot:
+  version_template: "{{ meta.version|incpatch }}-snapshot+{{ meta.short_commit }}"
+```
+
+- `version_template`: (Optional) Template for the snapshot's `meta.version` and `meta.tag`. It's rendered with the latest tag's metadata, or `v0.0.0` if there are no tags. The default above gives `1.2.4-snapshot+abc1234` after `v1.2.3`.
+
+The changelog for a snapshot lists the commits since the latest tag.
+
 ## Build Matrix
 
 You can expand a single build into multiple builds by defining a `matrix` on the build. Each matrix entry is a map of keys to lists of values, and Rlsr generates the cartesian product of those values.

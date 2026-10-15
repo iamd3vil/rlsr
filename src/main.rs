@@ -17,6 +17,12 @@ struct Args {
     #[clap(short, long)]
     skip_publish: bool,
 
+    /// Build without a release tag, for testing. Uncommitted changes are
+    /// allowed, the version comes from snapshot.version_template, and
+    /// nothing is published.
+    #[clap(long)]
+    snapshot: bool,
+
     /// Skip each build's command, prehook and posthook; package and publish
     /// existing artifacts. Release hooks still run.
     #[clap(long)]
@@ -56,6 +62,7 @@ async fn main() -> Result<()> {
 
     let opts = Opts {
         skip_publish: args.skip_publish,
+        snapshot: args.snapshot,
         rm_dist: args.rm_dist,
         skip_build: args.skip_build,
         split: args.split,

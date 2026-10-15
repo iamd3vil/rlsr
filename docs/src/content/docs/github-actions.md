@@ -42,7 +42,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Build only (no publish):
+Build only (no publish), for example on pull requests. Untagged commits need `--snapshot` (rlsr after v0.10.0):
 
 ```yaml
 jobs:
@@ -55,6 +55,7 @@ jobs:
       - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
         with:
           publish: false
+          args: --snapshot
 ```
 
 ## Inputs

@@ -264,28 +264,17 @@ pub async fn is_repo_clean() -> Result<bool> {
     Ok(output.stdout.is_empty())
 }
 
-pub async fn is_at_latest_tag() -> Result<bool> {
-    let head_output = Command::new("git")
-        .arg("rev-parse")
-        .arg("HEAD")
+/// Returns the tag pointing at HEAD, if there is one.
+pub async fn get_tag_at_head() -> Result<Option<String>> {
+    let output = Command::new("git")
+        .args(["describe", "--tags", "--exact-match", "HEAD"])
         .output()
         .await?;
-
-    let tag_output = Command::new("git")
-        .arg("rev-list")
-        .arg("--tags")
-        .arg("--max-count=1")
-        .output()
-        .await?;
-
-    let head_commit = String::from_utf8_lossy(&head_output.stdout)
-        .trim()
-        .to_string();
-    let latest_tag_commit = String::from_utf8_lossy(&tag_output.stdout)
-        .trim()
-        .to_string();
-
-    Ok(head_commit == latest_tag_commit)
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let tag = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(Some(tag).filter(|tag| !tag.is_empty()))
 }
 
 pub async fn get_latest_commit_hash() -> Result<String> {

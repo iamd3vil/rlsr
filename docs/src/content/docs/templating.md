@@ -65,7 +65,7 @@ Available fields:
 
 Notes:
 - `meta.release_url` is computed from the git `remote.origin.url` when it points at GitHub; otherwise it is empty.
-- `meta.is_snapshot` is true when the current commit is not at the latest tag.
+- `meta.is_snapshot` is true for `--snapshot` builds. In a snapshot, `meta.tag` and `meta.version` hold the rendered `snapshot.version_template`, and `meta.previous_tag` is the latest tag.
 - `meta.is_dirty` is true when there are uncommitted changes.
 
 Example:

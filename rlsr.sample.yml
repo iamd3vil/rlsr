@@ -122,3 +122,8 @@ changelog:
   # exclude the commits which match the regexes.
   exclude:
     - "^doc:"
+
+# Settings for `rlsr --snapshot`, which builds without a release tag and
+# never publishes.
+snapshot:
+  version_template: "{{ meta.version|incpatch }}-snapshot+{{ meta.short_commit }}"

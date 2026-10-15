@@ -1,4 +1,4 @@
-use crate::utils::{get_latest_commit_hash, get_latest_tag, is_at_latest_tag, is_repo_clean};
+use crate::utils::{get_latest_tag, get_tag_at_head, is_repo_clean};
 use chrono::{SecondsFormat, Utc};
 use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info, trace, warn};
@@ -27,6 +27,8 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
 pub struct Opts {
     pub skip_publish: bool,
+    /// Build without a release tag or a clean tree, and never publish.
+    pub snapshot: bool,
     pub rm_dist: bool,
     pub skip_build: bool,
     /// Build and package only, and write a manifest for a later merge run.
@@ -117,18 +119,15 @@ pub(crate) fn parse_version_meta(tag: &str) -> VersionMeta {
     }
 }
 
-async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
+async fn build_template_meta(tag: String, previous_tag: String) -> Result<TemplateMeta> {
     let version_meta = parse_version_meta(&tag);
-    // Git metadata is best-effort; previous tag may be empty on first release.
     let commit = utils::get_full_commit_hash().await?;
     let short_commit = utils::get_latest_commit_hash().await?;
     let branch = utils::get_current_branch().await?;
-    let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
     let project_name = utils::get_project_name();
     let release_url = utils::get_github_release_url(&tag)
         .await
         .unwrap_or_default();
-    let is_snapshot = !is_at_latest_tag().await.unwrap_or(false);
     let is_dirty = !is_repo_clean().await.unwrap_or(false);
     let is_prerelease = !version_meta.prerelease.is_empty();
     let env = std::env::vars().collect::<HashMap<String, String>>();
@@ -150,7 +149,7 @@ async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
         previous_tag,
         project_name,
         release_url,
-        is_snapshot,
+        is_snapshot: false,
         is_prerelease,
         is_dirty,
         env,
@@ -158,24 +157,6 @@ async fn build_template_meta(tag: String) -> Result<TemplateMeta> {
         timestamp,
         now,
     })
-}
-
-/// Checks repository status (cleanliness, tag) and updates the publish flag.
-async fn check_repo_status(publish: &mut bool) -> Result<()> {
-    let is_clean = is_repo_clean()
-        .await
-        .context("Failed to check repo cleanliness")?;
-    let at_latest_tag = is_at_latest_tag()
-        .await
-        .context("Failed to check if at latest tag")?;
-
-    debug!("is_clean: {}, at_latest_tag: {}", is_clean, at_latest_tag);
-
-    if !is_clean || !at_latest_tag {
-        warn!("Repo is not clean or the latest commit is not tagged, skipping publishing.");
-        *publish = false;
-    }
-    Ok(())
 }
 
 /// Handles the --rm-dist option and creates the distribution directory.
@@ -209,16 +190,58 @@ async fn prepare_dist_directory(release: &Release, rm_dist: bool) -> Result<()> 
     Ok(())
 }
 
-/// Determines the appropriate tag or commit hash for templating.
-async fn get_template_metadata() -> Result<Arc<TemplateMeta>> {
-    let tag = if is_at_latest_tag().await? {
-        get_latest_tag().await?
-    } else {
-        get_latest_commit_hash().await?
-    };
-    let template_meta = build_template_meta(tag).await?;
-    debug!("Tag/hash for templating: {}", template_meta.tag);
-    Ok(Arc::new(template_meta))
+const DEFAULT_SNAPSHOT_VERSION: &str =
+    "{{ meta.version|incpatch }}-snapshot+{{ meta.short_commit }}";
+
+/// Builds the template metadata for this run. A release needs a clean tree
+/// with a tag at HEAD; a snapshot takes its version from
+/// `snapshot.version_template` instead.
+async fn get_template_metadata(cfg: &Config, opts: &Opts) -> Result<Arc<TemplateMeta>> {
+    if !opts.snapshot {
+        if !is_repo_clean().await? {
+            bail!(
+                "the working tree has uncommitted changes; commit them to release, or pass --snapshot to build anyway"
+            );
+        }
+        let Some(tag) = get_tag_at_head().await? else {
+            bail!(
+                "HEAD isn't tagged; tag it to release, or pass --snapshot to build without a tag"
+            );
+        };
+        // Describing HEAD^ skips HEAD's own tag. Empty on the first release.
+        let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
+        let meta = build_template_meta(tag, previous_tag).await?;
+        debug!("Tag for templating: {}", meta.tag);
+        return Ok(Arc::new(meta));
+    }
+
+    // Snapshots version off the latest tag, and list the changes since it.
+    let latest_tag = get_latest_tag().await.ok();
+    let base_tag = latest_tag.clone().unwrap_or_else(|| "v0.0.0".to_string());
+    let mut meta = build_template_meta(base_tag, latest_tag.unwrap_or_default()).await?;
+    let template = cfg
+        .snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.version_template.as_deref())
+        .unwrap_or(DEFAULT_SNAPSHOT_VERSION);
+    let version = templating::render_template(template, &meta);
+    set_version(&mut meta, &version);
+    meta.tag = version;
+    meta.is_snapshot = true;
+    meta.release_url = String::new();
+    info!("Building snapshot {}", meta.tag);
+    Ok(Arc::new(meta))
+}
+
+/// Replaces the version fields with those parsed from `version`.
+fn set_version(meta: &mut TemplateMeta, version: &str) {
+    let parsed = parse_version_meta(version);
+    meta.version = version.trim_start_matches(['v', 'V']).to_string();
+    meta.major = parsed.major;
+    meta.minor = parsed.minor;
+    meta.patch = parsed.patch;
+    meta.is_prerelease = !parsed.prerelease.is_empty();
+    meta.prerelease = parsed.prerelease;
 }
 
 /// Executes a list of hook commands.
@@ -876,7 +899,7 @@ async fn build_release(
 }
 
 pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
-    let mut publish = !opts.skip_publish;
+    let publish = !opts.skip_publish && !opts.snapshot;
     if opts.skip_publish {
         warn!("--skip-publish is set, publishing will be skipped for all releases.");
     }
@@ -884,20 +907,12 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
         warn!("--skip-build is set, using existing artifacts instead of running builds.");
     }
 
-    // Initial repo status check affects default publish decision
-    check_repo_status(&mut publish)
-        .await
-        .context("Initial repository status check failed")?;
+    let template_meta = get_template_metadata(&cfg, &opts).await?;
 
     let releases = Arc::new(cfg.releases); // Use Arc for safe sharing across potential async boundaries if needed later
 
     for release_config in releases.iter() {
         info!("Processing release: '{}'", release_config.name);
-
-        // Determine template metadata once per release run
-        let template_meta = get_template_metadata()
-            .await
-            .context("Failed to get template metadata")?;
 
         let (collected_archives, collected_image_tags) = if opts.merge {
             let (archives, image_tags) = split::read_manifests(release_config)
@@ -990,7 +1005,7 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
             .with_context(|| format!("Publishing failed for release '{}'", release_config.name))?;
         } else {
             info!(
-                "Publishing skipped for release '{}' due to previous checks or --skip-publish flag.",
+                "Publishing skipped for release '{}' (--skip-publish or --snapshot).",
                 release_config.name
             );
         }
@@ -1220,6 +1235,52 @@ mod tests {
         let mut build = rust_build(&["x86_64-unknown-linux-musl"]);
         build.command = Some("cargo build".to_string());
         assert!(expand_builds(&release_with(vec![build])).is_err());
+    }
+
+    fn release_meta() -> TemplateMeta {
+        TemplateMeta {
+            tag: "v1.2.3".to_string(),
+            version: "1.2.3".to_string(),
+            major: 1,
+            minor: 2,
+            patch: 3,
+            prerelease: String::new(),
+            commit: "abcdef1234567890".to_string(),
+            short_commit: "abc1234".to_string(),
+            branch: "main".to_string(),
+            previous_tag: "v1.2.2".to_string(),
+            project_name: "rlsr".to_string(),
+            release_url: String::new(),
+            is_snapshot: false,
+            is_prerelease: false,
+            is_dirty: false,
+            env: HashMap::new(),
+            date: "2025-01-25".to_string(),
+            timestamp: "1706180400".to_string(),
+            now: "2025-01-25T10:30:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_default_snapshot_version() {
+        let mut meta = release_meta();
+        let version = templating::render_template(DEFAULT_SNAPSHOT_VERSION, &meta);
+        assert_eq!(version, "1.2.4-snapshot+abc1234");
+
+        set_version(&mut meta, &version);
+        assert_eq!(meta.version, "1.2.4-snapshot+abc1234");
+        assert_eq!((meta.major, meta.minor, meta.patch), (1, 2, 4));
+        assert_eq!(meta.prerelease, "snapshot");
+        assert!(meta.is_prerelease);
+    }
+
+    #[test]
+    fn test_set_version_strips_v_prefix() {
+        let mut meta = release_meta();
+        set_version(&mut meta, "v2.0.0");
+        assert_eq!(meta.version, "2.0.0");
+        assert_eq!((meta.major, meta.minor, meta.patch), (2, 0, 0));
+        assert!(!meta.is_prerelease);
     }
 
     #[test]

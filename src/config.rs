@@ -244,10 +244,19 @@ pub struct Build {
     pub archive_format: ArchiveFormat,
 }
 
+/// Settings for `--snapshot` builds.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct Snapshot {
+    /// Template for `meta.version` and `meta.tag`, rendered with the latest
+    /// tag's metadata.
+    pub version_template: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub releases: Vec<Release>,
     pub changelog: Option<Changelog>,
+    pub snapshot: Option<Snapshot>,
 }
 
 pub fn parse_config(cfg_path: &str) -> Result<Config> {
