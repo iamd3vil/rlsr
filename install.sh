@@ -23,11 +23,14 @@ echo "Detected architecture: $ARCH"
 if [[ "$OS" == "Linux" && "$ARCH" == "x86_64" ]]; then
     echo "Linux x86_64 system detected."
     DOWNLOAD_SUFFIX="linux-x86_64.zip"
+elif [[ "$OS" == "Linux" && ( "$ARCH" == "aarch64" || "$ARCH" == "arm64" ) ]]; then
+    echo "Linux ARM64 system detected."
+    DOWNLOAD_SUFFIX="linux-arm64.zip"
 elif [[ "$OS" == "Darwin" && "$ARCH" == "arm64" ]]; then
     echo "macOS ARM64 system detected."
     DOWNLOAD_SUFFIX="macos-arm64.zip"
 else
-    echo "Error: Unsupported system. This script supports Linux x86_64 and macOS ARM64 only."
+    echo "Error: Unsupported system. This script supports Linux x86_64, Linux ARM64 and macOS ARM64 only."
     exit 1
 fi
 

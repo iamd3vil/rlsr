@@ -44,10 +44,12 @@ runs:
 
         if [[ "$os" == "Linux" && "$arch" == "x86_64" ]]; then
           suffix="linux-x86_64.zip"
+        elif [[ "$os" == "Linux" && ( "$arch" == "aarch64" || "$arch" == "arm64" ) ]]; then
+          suffix="linux-arm64.zip"
         elif [[ "$os" == "Darwin" && "$arch" == "arm64" ]]; then
           suffix="macos-arm64.zip"
         else
-          echo "Unsupported runner: ${os}/${arch}. Supported: Linux x86_64, macOS arm64."
+          echo "Unsupported runner: ${os}/${arch}. Supported: Linux x86_64, Linux arm64, macOS arm64."
           exit 1
         fi
 

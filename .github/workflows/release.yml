@@ -21,6 +21,9 @@ jobs:
           - name: linux
             target: x86_64-unknown-linux-musl
             runner: ubuntu-latest
+          - name: linux-arm64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-latest
           - name: windows
             target: x86_64-pc-windows-gnu
             runner: ubuntu-latest

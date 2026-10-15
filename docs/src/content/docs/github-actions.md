@@ -73,7 +73,7 @@ jobs:
 
 - Publishing needs a tag and a clean repo; otherwise `rlsr` skips publish.
 - Use `actions/checkout` with `fetch-depth: 0` so tags are available for changelogs.
-- Supported runners: Linux x86_64 and macOS arm64.
+- Supported runners: Linux x86_64, Linux arm64 (rlsr releases after v0.10.0) and macOS arm64.
 - Use `rlsr_version` to pin a known version instead of `latest`.
 
 ## Advanced examples
