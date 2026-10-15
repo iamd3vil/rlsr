@@ -23,6 +23,7 @@ OPTIONS:
         --rm-dist
     -s, --skip-publish
         --snapshot
+        --nightly
         --skip-build
         --split
         --targets <TARGETS>
@@ -33,6 +34,8 @@ OPTIONS:
 A release needs a clean working tree and a tag on HEAD; rlsr stops with an error otherwise. If `--skip-publish` flag is given, `rlsr` will skip publishing. `rm-dist` flag cleans the dist folder before building the release again.
 
 `--snapshot` builds without a tag, for testing a release locally or in CI. Uncommitted changes are allowed, nothing is published, and the version comes from [`snapshot.version_template`](/config/config/#snapshot), `1.2.4-snapshot+abc1234` by default after `v1.2.3`.
+
+`--nightly` builds HEAD and publishes it as a rolling prerelease under the `nightly` tag, replacing the previous nightly. See [Nightly](/config/config/#nightly).
 
 `--skip-build` skips each build's command, `prehook` and `posthook`, and packages the files already at the configured `artifact` paths. Use it when the binaries were built elsewhere, such as on [parallel CI runners](/github-actions/#build-on-parallel-runners). Release-level `hooks` still run. Buildx builds aren't supported with `--skip-build`.
 

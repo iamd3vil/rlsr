@@ -268,6 +268,26 @@ snapshot:
 
 The changelog for a snapshot lists the commits since the latest tag.
 
+## Nightly
+
+`rlsr --nightly` builds HEAD and publishes it as a single rolling release, like GoReleaser's nightlies. Each run replaces the previous nightly: the release and its tag are deleted and recreated at HEAD, so download links such as `releases/download/nightly/myapp-nightly-linux-x86_64.zip` stay the same. The working tree must be clean, but HEAD doesn't need a tag.
+
+```yaml
+nightly:
+  tag_name: "nightly"
+  version_template: "{{ meta.version|incpatch }}-nightly.{{ date|replace('-', '') }}+{{ meta.short_commit }}"
+```
+
+- `tag_name`: (Optional) The rolling tag, and the value of `meta.tag` in a nightly. Defaults to `nightly`. Version lookups ignore this tag, so it never counts as a release.
+- `version_template`: (Optional) Template for the nightly's `meta.version`, rendered with the latest tag's metadata. The default gives `1.2.4-nightly.20261015+abc1234` after `v1.2.3`.
+
+A nightly is always a prerelease, so it never becomes the latest release, and its changelog lists the commits since the latest tag. If the nightly tag already points at HEAD, rlsr exits without building, so a scheduled job doesn't republish the same commit. Delete the tag to force a rebuild.
+
+Each target handles the rolling release:
+
+- GitHub: deletes the previous release and tag, then creates the release at HEAD.
+- Docker: pushes images tagged with `meta.tag`, so an image without a tag is pushed as `:nightly`. `meta.version` contains `+`, which Docker tags don't allow, so don't use it in image tags.
+
 ## Build Matrix
 
 You can expand a single build into multiple builds by defining a `matrix` on the build. Each matrix entry is a map of keys to lists of values, and Rlsr generates the cartesian product of those values.

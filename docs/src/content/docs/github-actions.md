@@ -111,6 +111,35 @@ jobs:
           publish: false
 ```
 
+### Nightly builds
+
+Publish HEAD of the default branch every night as the rolling `nightly` prerelease. rlsr skips the run when the nightly tag already points at HEAD.
+
+```yaml
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: iamd3vil/rlsr/.github/actions/rlsr@v0.10.0
+        with:
+          publish: true
+          args: --nightly
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+`fetch-tags` is needed so rlsr can see where the nightly tag points. `--nightly` needs rlsr after v0.10.0.
+
 ### Build on parallel runners
 
 By default rlsr runs every build on one runner. To give each target its own

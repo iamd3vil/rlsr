@@ -23,6 +23,12 @@ struct Args {
     #[clap(long)]
     snapshot: bool,
 
+    /// Build HEAD and publish it as the nightly, replacing the previous one
+    /// under the rolling nightly tag. The version comes from
+    /// nightly.version_template.
+    #[clap(long, conflicts_with = "snapshot")]
+    nightly: bool,
+
     /// Skip each build's command, prehook and posthook; package and publish
     /// existing artifacts. Release hooks still run.
     #[clap(long)]
@@ -63,6 +69,7 @@ async fn main() -> Result<()> {
     let opts = Opts {
         skip_publish: args.skip_publish,
         snapshot: args.snapshot,
+        nightly: args.nightly,
         rm_dist: args.rm_dist,
         skip_build: args.skip_build,
         split: args.split,

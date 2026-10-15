@@ -188,6 +188,7 @@ mod tests {
             project_name: "rlsr".to_string(),
             release_url: "https://github.com/owner/repo/releases/tag/v1.2.3".to_string(),
             is_snapshot: false,
+            is_nightly: false,
             is_prerelease: false,
             is_dirty: false,
             env: HashMap::new(),

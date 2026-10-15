@@ -127,3 +127,9 @@ changelog:
 # never publishes.
 snapshot:
   version_template: "{{ meta.version|incpatch }}-snapshot+{{ meta.short_commit }}"
+
+# Settings for `rlsr --nightly`, which publishes HEAD as a rolling prerelease,
+# replacing the previous nightly under the same tag.
+nightly:
+  tag_name: "nightly"
+  version_template: "{{ meta.version|incpatch }}-nightly.{{ date|replace('-', '') }}+{{ meta.short_commit }}"

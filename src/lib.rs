@@ -29,6 +29,8 @@ pub struct Opts {
     pub skip_publish: bool,
     /// Build without a release tag or a clean tree, and never publish.
     pub snapshot: bool,
+    /// Publish a nightly under the rolling nightly tag.
+    pub nightly: bool,
     pub rm_dist: bool,
     pub skip_build: bool,
     /// Build and package only, and write a manifest for a later merge run.
@@ -54,6 +56,7 @@ pub struct TemplateMeta {
     pub project_name: String,
     pub release_url: String,
     pub is_snapshot: bool,
+    pub is_nightly: bool,
     pub is_prerelease: bool,
     pub is_dirty: bool,
     pub env: HashMap<String, String>,
@@ -150,6 +153,7 @@ async fn build_template_meta(tag: String, previous_tag: String) -> Result<Templa
         project_name,
         release_url,
         is_snapshot: false,
+        is_nightly: false,
         is_prerelease,
         is_dirty,
         env,
@@ -192,33 +196,61 @@ async fn prepare_dist_directory(release: &Release, rm_dist: bool) -> Result<()> 
 
 const DEFAULT_SNAPSHOT_VERSION: &str =
     "{{ meta.version|incpatch }}-snapshot+{{ meta.short_commit }}";
+const DEFAULT_NIGHTLY_VERSION: &str =
+    "{{ meta.version|incpatch }}-nightly.{{ date|replace('-', '') }}+{{ meta.short_commit }}";
 
 /// Builds the template metadata for this run. A release needs a clean tree
-/// with a tag at HEAD; a snapshot takes its version from
-/// `snapshot.version_template` instead.
+/// with a tag at HEAD. Snapshots and nightlies take their version from a
+/// template instead, rendered with the latest tag's metadata.
 async fn get_template_metadata(cfg: &Config, opts: &Opts) -> Result<Arc<TemplateMeta>> {
-    if !opts.snapshot {
-        if !is_repo_clean().await? {
+    // The nightly's rolling tag isn't a version, so tag lookups skip it.
+    let nightly_tag = cfg.nightly_tag();
+
+    if !opts.snapshot && !is_repo_clean().await? {
+        bail!(
+            "the working tree has uncommitted changes; commit them to publish, or pass --snapshot to build anyway"
+        );
+    }
+
+    if !opts.snapshot && !opts.nightly {
+        let Some(tag) = get_tag_at_head(nightly_tag).await? else {
             bail!(
-                "the working tree has uncommitted changes; commit them to release, or pass --snapshot to build anyway"
-            );
-        }
-        let Some(tag) = get_tag_at_head().await? else {
-            bail!(
-                "HEAD isn't tagged; tag it to release, or pass --snapshot to build without a tag"
+                "HEAD isn't tagged; tag it to release, or pass --snapshot or --nightly to build without a tag"
             );
         };
         // Describing HEAD^ skips HEAD's own tag. Empty on the first release.
-        let previous_tag = utils::get_previous_tag().await.unwrap_or_default();
+        let previous_tag = utils::get_previous_tag(nightly_tag)
+            .await
+            .unwrap_or_default();
         let meta = build_template_meta(tag, previous_tag).await?;
         debug!("Tag for templating: {}", meta.tag);
         return Ok(Arc::new(meta));
     }
 
-    // Snapshots version off the latest tag, and list the changes since it.
-    let latest_tag = get_latest_tag().await.ok();
+    // Version off the latest tag, and list the changes since it.
+    let latest_tag = get_latest_tag(nightly_tag).await.ok();
     let base_tag = latest_tag.clone().unwrap_or_else(|| "v0.0.0".to_string());
     let mut meta = build_template_meta(base_tag, latest_tag.unwrap_or_default()).await?;
+
+    if opts.nightly {
+        let template = cfg
+            .nightly
+            .as_ref()
+            .and_then(|nightly| nightly.version_template.as_deref())
+            .unwrap_or(DEFAULT_NIGHTLY_VERSION);
+        let version = templating::render_template(template, &meta);
+        set_version(&mut meta, &version);
+        meta.tag = nightly_tag.to_string();
+        meta.is_nightly = true;
+        // Nightlies must never become the latest release.
+        meta.is_prerelease = true;
+        meta.release_url = utils::get_github_release_url(nightly_tag)
+            .await
+            .unwrap_or_default();
+        info!("Building nightly {} ({})", meta.version, meta.tag);
+        return Ok(Arc::new(meta));
+    }
+
     let template = cfg
         .snapshot
         .as_ref()
@@ -909,6 +941,18 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
 
     let template_meta = get_template_metadata(&cfg, &opts).await?;
 
+    // Scheduled nightlies shouldn't rebuild and republish an unchanged HEAD.
+    if opts.nightly
+        && utils::get_tag_commit(&template_meta.tag).await?.as_deref()
+            == Some(template_meta.commit.as_str())
+    {
+        info!(
+            "The {} tag already points at HEAD ({}); nothing new for a nightly.",
+            template_meta.tag, template_meta.short_commit
+        );
+        return Ok(());
+    }
+
     let releases = Arc::new(cfg.releases); // Use Arc for safe sharing across potential async boundaries if needed later
 
     for release_config in releases.iter() {
@@ -1252,6 +1296,7 @@ mod tests {
             project_name: "rlsr".to_string(),
             release_url: String::new(),
             is_snapshot: false,
+            is_nightly: false,
             is_prerelease: false,
             is_dirty: false,
             env: HashMap::new(),
@@ -1272,6 +1317,16 @@ mod tests {
         assert_eq!((meta.major, meta.minor, meta.patch), (1, 2, 4));
         assert_eq!(meta.prerelease, "snapshot");
         assert!(meta.is_prerelease);
+    }
+
+    #[test]
+    fn test_default_nightly_version() {
+        let mut meta = release_meta();
+        let version = templating::render_template(DEFAULT_NIGHTLY_VERSION, &meta);
+        assert_eq!(version, "1.2.4-nightly.20250125+abc1234");
+
+        set_version(&mut meta, &version);
+        assert_eq!(meta.prerelease, "nightly.20250125");
     }
 
     #[test]

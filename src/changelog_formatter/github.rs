@@ -61,7 +61,11 @@ impl GithubFormatter {
             .ok_or_else(|| eyre!("github_notes needs a GitHub remote.origin.url"))?;
         let repo = self.ghclient.repos(owner, repo);
         let releases = repo.releases();
-        let mut req = releases.generate_release_notes(&meta.tag);
+        // target_commitish matters when the tag doesn't exist yet or points
+        // elsewhere, as with a nightly's rolling tag.
+        let mut req = releases
+            .generate_release_notes(&meta.tag)
+            .target_commitish(&meta.commit);
         if !meta.previous_tag.is_empty() {
             req = req.previous_tag_name(&meta.previous_tag);
         }

@@ -28,7 +28,7 @@ Available fields:
 - `meta.build_name`
 - `meta.tag`, `meta.version`, `meta.major`, `meta.minor`, `meta.patch`, `meta.prerelease`
 - `meta.short_commit`
-- `meta.is_snapshot`, `meta.is_prerelease`, `meta.is_dirty`
+- `meta.is_snapshot`, `meta.is_nightly`, `meta.is_prerelease`, `meta.is_dirty`
 - `meta.os`, `meta.arch`, `meta.arm`, `meta.target` (filled in per target for `rust` and `go` builds)
 - `meta.matrix` (map of matrix values, e.g. `meta.matrix.os`)
 - `env.VAR_NAME`
@@ -59,13 +59,14 @@ Available fields:
 - `meta.commit`, `meta.short_commit`
 - `meta.branch`, `meta.previous_tag`
 - `meta.project_name`, `meta.release_url`
-- `meta.is_snapshot`, `meta.is_prerelease`, `meta.is_dirty`
+- `meta.is_snapshot`, `meta.is_nightly`, `meta.is_prerelease`, `meta.is_dirty`
 - `env.VAR_NAME`
 - `date` (YYYY-MM-DD), `timestamp` (unix seconds), `now` (RFC 3339)
 
 Notes:
 - `meta.release_url` is computed from the git `remote.origin.url` when it points at GitHub; otherwise it is empty.
 - `meta.is_snapshot` is true for `--snapshot` builds. In a snapshot, `meta.tag` and `meta.version` hold the rendered `snapshot.version_template`, and `meta.previous_tag` is the latest tag.
+- `meta.is_nightly` is true for `--nightly` builds. In a nightly, `meta.tag` is the rolling tag (`nightly` by default), `meta.version` holds the rendered `nightly.version_template`, `meta.previous_tag` is the latest tag, and `meta.is_prerelease` is always true.
 - `meta.is_dirty` is true when there are uncommitted changes.
 
 Example:

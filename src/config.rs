@@ -252,11 +252,33 @@ pub struct Snapshot {
     pub version_template: Option<String>,
 }
 
+/// Settings for `--nightly` builds.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct Nightly {
+    /// The rolling tag the nightly release is published under.
+    pub tag_name: Option<String>,
+    /// Template for `meta.version`, rendered with the latest tag's metadata.
+    pub version_template: Option<String>,
+}
+
+pub const DEFAULT_NIGHTLY_TAG: &str = "nightly";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub releases: Vec<Release>,
     pub changelog: Option<Changelog>,
     pub snapshot: Option<Snapshot>,
+    pub nightly: Option<Nightly>,
+}
+
+impl Config {
+    /// The nightly's rolling tag, which version lookups ignore.
+    pub fn nightly_tag(&self) -> &str {
+        self.nightly
+            .as_ref()
+            .and_then(|nightly| nightly.tag_name.as_deref())
+            .unwrap_or(DEFAULT_NIGHTLY_TAG)
+    }
 }
 
 pub fn parse_config(cfg_path: &str) -> Result<Config> {
@@ -301,6 +323,7 @@ mod tests {
         let cfg = parse_config("rlsr.sample.yml").expect("rlsr.sample.yml should parse");
         assert!(!cfg.releases.is_empty());
         assert!(cfg.snapshot.is_some());
+        assert_eq!(cfg.nightly_tag(), "nightly");
     }
 
     #[test]

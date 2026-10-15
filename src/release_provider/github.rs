@@ -75,12 +75,18 @@ impl Github {
             .personal_token(ghtoken.clone())
             .build()?;
 
-        let gh_release = match Self::find_release(&ghclient, gh, latest_tag).await? {
-            Some(existing) => {
-                info!("release for {} already exists, uploading to it", latest_tag);
-                existing
+        let gh_release = if meta.is_nightly {
+            // A nightly replaces the previous one under the same tag.
+            Self::delete_release_and_tag(&ghclient, gh, latest_tag).await?;
+            self.create_release(&ghclient, gh, meta).await?
+        } else {
+            match Self::find_release(&ghclient, gh, latest_tag).await? {
+                Some(existing) => {
+                    info!("release for {} already exists, uploading to it", latest_tag);
+                    existing
+                }
+                None => self.create_release(&ghclient, gh, meta).await?,
             }
-            None => self.create_release(&ghclient, gh, meta).await?,
         };
 
         let mut files = all_archives;
@@ -148,6 +154,41 @@ impl Github {
         Ok(releases.items.into_iter().find(|r| r.tag_name == tag))
     }
 
+    /// Deletes the release for a tag and the tag itself, if they exist.
+    async fn delete_release_and_tag(
+        ghclient: &octocrab::Octocrab,
+        gh: &GithubConfig,
+        tag: &str,
+    ) -> Result<()> {
+        if let Some(existing) = Self::find_release(ghclient, gh, tag).await? {
+            info!("deleting the previous {} release", tag);
+            let route = format!("/repos/{}/{}/releases/{}", gh.owner, gh.repo, existing.id.0);
+            let res = ghclient
+                ._delete(route, None::<&()>)
+                .await
+                .context("error deleting the previous release")?;
+            octocrab::map_github_error(res)
+                .await
+                .with_context(|| format!("error deleting the previous {} release", tag))?;
+        }
+
+        // Deleting a release leaves its tag behind.
+        let route = format!("/repos/{}/{}/git/refs/tags/{}", gh.owner, gh.repo, tag);
+        let res = ghclient
+            ._delete(route, None::<&()>)
+            .await
+            .context("error deleting the previous tag")?;
+        // GitHub answers 422 when the tag doesn't exist.
+        if matches!(res.status().as_u16(), 404 | 422) {
+            return Ok(());
+        }
+        octocrab::map_github_error(res)
+            .await
+            .with_context(|| format!("error deleting the {} tag", tag))?;
+        info!("deleted the previous {} tag", tag);
+        Ok(())
+    }
+
     async fn create_release(
         &self,
         ghclient: &octocrab::Octocrab,
@@ -173,6 +214,8 @@ impl Github {
             .repos(&gh.owner, &gh.repo)
             .releases()
             .create(tag)
+            // Creates the tag at HEAD when it doesn't exist, as for a nightly.
+            .target_commitish(&meta.commit)
             .name(&name)
             .body(&changelog)
             .draft(gh.draft)

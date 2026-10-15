@@ -77,10 +77,11 @@ pub fn get_release_providers(
     Ok(providers)
 }
 
-// Gets the latest tag if it exists.
-pub async fn get_latest_tag() -> Result<String> {
+// Gets the latest tag if it exists, ignoring the `exclude` tag (the nightly's
+// rolling tag).
+pub async fn get_latest_tag(exclude: &str) -> Result<String> {
     let mut cmd = Command::new("git");
-    cmd.args(vec!["describe", "--abbrev=0", "--tags"]);
+    cmd.args(["describe", "--abbrev=0", "--tags", "--exclude", exclude]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!("error getting latest tag");
@@ -90,10 +91,17 @@ pub async fn get_latest_tag() -> Result<String> {
     ))
 }
 
-pub async fn get_previous_tag() -> Result<String> {
+pub async fn get_previous_tag(exclude: &str) -> Result<String> {
     // Use HEAD^ so the current tag isn't returned when HEAD is tagged.
     let mut cmd = Command::new("git");
-    cmd.args(vec!["describe", "--tags", "--abbrev=0", "HEAD^"]);
+    cmd.args([
+        "describe",
+        "--tags",
+        "--abbrev=0",
+        "--exclude",
+        exclude,
+        "HEAD^",
+    ]);
     let output = cmd.output().await?;
     if !output.status.success() {
         bail!(
@@ -264,10 +272,17 @@ pub async fn is_repo_clean() -> Result<bool> {
     Ok(output.stdout.is_empty())
 }
 
-/// Returns the tag pointing at HEAD, if there is one.
-pub async fn get_tag_at_head() -> Result<Option<String>> {
+/// Returns the tag pointing at HEAD, if there is one, ignoring `exclude`.
+pub async fn get_tag_at_head(exclude: &str) -> Result<Option<String>> {
     let output = Command::new("git")
-        .args(["describe", "--tags", "--exact-match", "HEAD"])
+        .args([
+            "describe",
+            "--tags",
+            "--exact-match",
+            "--exclude",
+            exclude,
+            "HEAD",
+        ])
         .output()
         .await?;
     if !output.status.success() {
@@ -275,6 +290,21 @@ pub async fn get_tag_at_head() -> Result<Option<String>> {
     }
     let tag = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(Some(tag).filter(|tag| !tag.is_empty()))
+}
+
+/// Returns the commit a tag points to, if the tag exists.
+pub async fn get_tag_commit(tag: &str) -> Result<Option<String>> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet"])
+        .arg(format!("refs/tags/{}^{{commit}}", tag))
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    ))
 }
 
 pub async fn get_latest_commit_hash() -> Result<String> {
