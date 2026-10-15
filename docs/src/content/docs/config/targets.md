@@ -24,10 +24,14 @@ targets:
   github:
     owner: "username"
     repo: "repository"
+    draft: false # optional
+    name: "{{ meta.project_name }} {{ meta.tag }}" # optional
 ```
 
 - `owner`: The GitHub username or organization name where the repository is hosted.
 - `repo`: The name of the GitHub repository.
+- `draft`: (Optional) Create the release as a draft so you can review it before publishing. Defaults to `false`.
+- `name`: (Optional) The release title. Supports [templating](/templating/) with the release fields (`meta.tag`, `meta.version`, `meta.project_name` and so on). Defaults to the tag.
 
 Tags with a semver prerelease part, such as `v1.2.0-rc.1`, are published as GitHub prereleases, so they don't become the repository's latest release.
 

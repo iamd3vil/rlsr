@@ -14,6 +14,7 @@ Templating is supported in:
 - Build env values: `env`
 - Rust and Go build fields: `rust.tool`, `rust.flags`, `rust.binary`, `go.main`, `go.flags`, `go.ldflags`, `go.binary`
 - Additional files: release and build `additional_files`
+- GitHub release title: `targets.github.name`
 - Docker target images: `targets.docker.image`, `targets.docker.images`
 - Changelog templates: `changelog.template`
 

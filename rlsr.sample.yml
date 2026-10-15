@@ -8,6 +8,8 @@ releases:
       github:
         owner: "iamd3vil"
         repo: "rlsr"
+        draft: false # Create the release as a draft.
+        name: "rlsr {{ meta.tag }}" # Release title, defaults to the tag.
       gitlab:
         owner: "namespace" # or username
         repo: "project-name"

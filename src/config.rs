@@ -23,6 +23,13 @@ impl std::fmt::Display for HookType {
 pub struct Github {
     pub owner: String,
     pub repo: String,
+
+    /// Create the release as a draft.
+    #[serde(default)]
+    pub draft: bool,
+
+    /// Release title template; defaults to the tag.
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -320,6 +327,36 @@ releases:
         assert!(builds[1].target.is_none());
         assert_eq!(builds[1].build_type, BuildType::Custom);
         assert_eq!(builds[1].command.as_deref(), Some("echo build2"));
+    }
+
+    #[test]
+    fn test_github_target_options() {
+        let yaml = r#"
+releases:
+  - name: "Test Release"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "owner"
+        repo: "repo"
+        draft: true
+        name: "App {{ meta.tag }}"
+    builds: []
+"#;
+
+        let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
+        let github = cfg.releases[0].targets.github.as_ref().unwrap();
+        assert!(github.draft);
+        assert_eq!(github.name.as_deref(), Some("App {{ meta.tag }}"));
+
+        let yaml = yaml.replace(
+            "        draft: true\n        name: \"App {{ meta.tag }}\"\n",
+            "",
+        );
+        let cfg: Config = serde_yaml::from_str(&yaml).expect("config should deserialize");
+        let github = cfg.releases[0].targets.github.as_ref().unwrap();
+        assert!(!github.draft);
+        assert!(github.name.is_none());
     }
 
     #[test]

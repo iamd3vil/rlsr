@@ -284,6 +284,7 @@ Templating can be used in the following configuration fields:
 - Build env values: `env`
 - Rust and Go build fields: `rust.tool`, `rust.flags`, `rust.binary`, `go.main`, `go.flags`, `go.ldflags`, `go.binary`
 - Additional files: release and build `additional_files`
+- GitHub release title: `targets.github.name`
 - Docker image: `targets.docker.image`, `targets.docker.images`
 
 ### Example Usage

@@ -1,6 +1,7 @@
 use crate::config::{Changelog, Release};
 use crate::release_provider::ReleaseProvider;
 use crate::utils::{get_all_git_log, get_all_tags, get_changelog};
+use crate::{build_template_meta, templating};
 use async_trait::async_trait;
 use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, Result};
@@ -77,12 +78,21 @@ impl Github {
 
         // Tags like v1.0.0-rc.1 shouldn't become the repo's latest release.
         let prerelease = !crate::parse_version_meta(&latest_tag).prerelease.is_empty();
+        let name = match &gh.name {
+            Some(name) => {
+                let meta = build_template_meta(latest_tag.clone()).await?;
+                templating::render_template(name, &meta)
+            }
+            None => latest_tag.clone(),
+        };
 
         let res = ghclient
             .repos(&gh.owner, &gh.repo)
             .releases()
             .create(&latest_tag)
+            .name(&name)
             .body(&changelog)
+            .draft(gh.draft)
             .prerelease(prerelease)
             .send()
             .await
