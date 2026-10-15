@@ -127,11 +127,13 @@ Specify commands to run at certain points in the release process:
 
 The `builds` section is an array that defines one or more build configurations. Each build configuration can include:
 
-- `type`: (Optional) Build type. Defaults to `custom`. Use `buildx` for Docker Buildx builds.
+- `type`: (Optional) Build type. Defaults to `custom`. Use `rust` or `go` for native builds, or `buildx` for Docker Buildx builds.
 - `command`: The command to execute for building (required for `custom` builds).
+- `rust`: (Optional) Rust configuration when `type` is `rust`.
+- `go`: (Optional) Go configuration when `type` is `go`.
 - `buildx`: (Optional) Buildx configuration when `type` is `buildx`.
 - `bin_name`: (Optional) The name of the binary produced.
-- `artifact`: The path to the built artifact.
+- `artifact`: The path to the built artifact. Optional for `rust` and `go` builds.
 - `archive_name`: The name of the archive containing the artifact.
 - `archive_format`: (Optional) The archive format to use. Defaults to `zip`. Supported formats:
   - `zip`: Standard ZIP archive (default)
@@ -154,6 +156,74 @@ The `builds` section is an array that defines one or more build configurations. 
 ### Custom (default)
 
 Use `type: "custom"` (or omit `type`) to run a shell command. This build type uses the `command` field to produce the artifact.
+
+### Rust
+
+Use `type: "rust"` to build a Cargo project for a list of target triples. Rlsr expands the build into one build per target and works out the command, the artifact path and the `os`/`arch`/`arm`/`target` fields, so you don't write them per target.
+
+```yaml
+builds:
+  - name: "myapp"
+    type: "rust"
+    archive_name: "myapp-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+    rust:
+      targets:
+        - "x86_64-unknown-linux-musl"
+        - "aarch64-apple-darwin"
+        - "x86_64-pc-windows-gnu"
+```
+
+For each target, Rlsr installs the target with `rustup target add` if `rustup target list --installed` doesn't list it, runs `<tool> --target <target> <flags>` and picks up `<target dir>/<target>/<profile>/<binary>` (with `.exe` on Windows).
+
+Supported `rust` keys:
+
+- `targets`: Target triples to build.
+- `tool`: (Optional) The build command, which must accept `--target`. Defaults to `cargo zigbuild`, which cross-compiles with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild). Use `cargo build` for the host target or `cross build` for [cross](https://github.com/cross-rs/cross). Rlsr skips the rustup step for `cross`. Rlsr doesn't install these tools; install them in a before hook or in CI.
+- `flags`: (Optional) Extra cargo flags. Defaults to `--release`. Setting `flags` replaces the default, so include `--release` or `--profile <name>` yourself. Rlsr reads the profile from these flags to find the binary.
+- `binary`: (Optional) The binary name. Defaults to the package name in `Cargo.toml`. Set it for workspaces, together with `-p <package>` in `flags`.
+
+The target directory comes from `CARGO_TARGET_DIR` in the build or release `env`, then the environment rlsr runs in, then `target`. A templated value such as `CARGO_TARGET_DIR=target/{{ meta.target }}` gives each target its own directory so parallel builds don't wait on Cargo's lock. Rlsr doesn't read `build.target-dir` from `.cargo/config.toml`; set `artifact` yourself in that case.
+
+### Go
+
+Use `type: "go"` to build a Go program for a list of `os/arch` targets. Like Rust builds, it expands into one build per target.
+
+```yaml
+builds:
+  - name: "myapp"
+    type: "go"
+    archive_name: "myapp-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+    env:
+      - "CGO_ENABLED=0"
+    go:
+      main: "./cmd/myapp"
+      targets: ["linux/amd64", "linux/arm64", "linux/arm/7", "darwin/arm64", "windows/amd64"]
+      flags: ["-trimpath"]
+      ldflags: ["-s -w", "-X main.version={{ meta.version }}"]
+```
+
+For each target, Rlsr sets `GOOS` and `GOARCH` and runs `go build <flags> -ldflags "<ldflags>" -o <artifact> <main>`. The binary goes to `<dist_folder>/go/<os>_<arch>[_<variant>]/<binary>` (with `.exe` on Windows).
+
+Supported `go` keys:
+
+- `targets`: Targets as `os/arch` or `os/arch/variant`. The variant sets `GOARM` for `arm` (also exposed as `meta.arm`), `GOARM64` for `arm64`, `GOAMD64` for `amd64` and `GO386` for `386`.
+- `main`: (Optional) The package to build. Defaults to `.`.
+- `flags`: (Optional) Extra `go build` flags.
+- `ldflags`: (Optional) Linker flags, joined with spaces and passed as one `-ldflags` value.
+- `binary`: (Optional) The binary name. Defaults to the last element of the module path in `go.mod`, ignoring a `/vN` suffix.
+
+Because Go binaries are written inside `dist_folder`, `--rm-dist` deletes them. When you use `--skip-build` with Go binaries built elsewhere, don't pass `--rm-dist`.
+
+### Native build notes
+
+These apply to both `rust` and `go` builds:
+
+- `meta.os` and `meta.arch` use Go's names (`linux`, `darwin`, `windows`, `amd64`, `arm64`, `386`, `arm`), for Rust triples too, so the same `archive_name` template works for both. `meta.target` is the target as written in the config.
+- With more than one target, `archive_name` must be templated (for example with `{{ meta.os }}-{{ meta.arch }}`) so each target gets its own archive.
+- An untemplated build `name` gets the target appended in logs, such as `myapp (aarch64-apple-darwin)`.
+- `command` isn't allowed. Use `prehook`/`posthook` for extra steps.
+- Setting `artifact` overrides the computed path. It can use `{{ meta.target }}`, `{{ meta.os }}` and so on.
+- `matrix` still works. Each matrix combination expands into every target.
 
 ### Buildx
 
@@ -212,6 +282,7 @@ Templating can be used in the following configuration fields:
 - Release env values: `env`
 - Build fields: `name`, `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
 - Build env values: `env`
+- Rust and Go build fields: `rust.tool`, `rust.flags`, `rust.binary`, `go.main`, `go.flags`, `go.ldflags`, `go.binary`
 - Additional files: release and build `additional_files`
 - Docker image: `targets.docker.image`, `targets.docker.images`
 

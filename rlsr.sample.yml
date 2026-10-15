@@ -53,6 +53,34 @@ releases:
           - "README.md"
           - "LICENSE"
 
+      # Native Rust build: one build per target triple. The command, artifact
+      # path and meta.os/arch/target are worked out for each target.
+      - name: "Rust native build"
+        type: "rust"
+        archive_name: "rlsr-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+        archive_format: tar_gz
+        rust:
+          targets:
+            - "x86_64-unknown-linux-musl"
+            - "aarch64-apple-darwin"
+            - "x86_64-pc-windows-gnu"
+          tool: "cargo zigbuild" # Default. Or "cargo build", "cross build".
+          flags: ["--release"] # Default.
+          # binary: "rlsr" # Defaults to the package name in Cargo.toml.
+
+      # Native Go build: one `go build` per os/arch[/variant] target.
+      - name: "Go native build"
+        type: "go"
+        archive_name: "app-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+        env:
+          - "CGO_ENABLED=0"
+        go:
+          targets: ["linux/amd64", "linux/arm/7", "darwin/arm64", "windows/amd64"]
+          main: "./cmd/app" # Defaults to ".".
+          flags: ["-trimpath"]
+          ldflags: ["-s -w", "-X main.version={{ meta.version }}"]
+          # binary: "app" # Defaults to the last element of the go.mod module path.
+
       - name: "Docker buildx image"
         type: "buildx"
         artifact: "./target/buildx/rlsr-image.tar"

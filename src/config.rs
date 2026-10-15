@@ -108,6 +108,10 @@ pub enum BuildType {
     Custom,
     #[serde(rename = "buildx")]
     Buildx,
+    #[serde(rename = "rust")]
+    Rust,
+    #[serde(rename = "go")]
+    Go,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -156,6 +160,34 @@ pub struct BuildxConfig {
     pub annotations: Option<BTreeMap<String, String>>,
 }
 
+/// Config for `type: rust` builds. Expands into one cargo build per target triple.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct RustConfig {
+    #[serde(default)]
+    pub targets: Vec<String>,
+    /// Command that takes `--target`, e.g. `cargo zigbuild`, `cargo build` or `cross build`.
+    /// Defaults to `cargo zigbuild`.
+    pub tool: Option<String>,
+    /// Defaults to `--release`.
+    pub flags: Option<Vec<String>>,
+    /// Binary name; defaults to the package name in Cargo.toml.
+    pub binary: Option<String>,
+}
+
+/// Config for `type: go` builds. Expands into one `go build` per os/arch target.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct GoConfig {
+    /// Targets as `os/arch` or `os/arch/variant`, e.g. `linux/arm/7`.
+    #[serde(default)]
+    pub targets: Vec<String>,
+    /// Package to build. Defaults to `.`.
+    pub main: Option<String>,
+    pub flags: Option<Vec<String>>,
+    pub ldflags: Option<Vec<String>>,
+    /// Binary name; defaults to the last element of the module path in go.mod.
+    pub binary: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Build {
     #[serde(rename = "type", default)]
@@ -165,6 +197,11 @@ pub struct Build {
     pub command: Option<String>,
 
     pub buildx: Option<BuildxConfig>,
+    pub rust: Option<RustConfig>,
+    pub go: Option<GoConfig>,
+
+    // Rust and Go builds work this out per target when left empty.
+    #[serde(default)]
     pub artifact: String,
     pub bin_name: Option<String>,
     pub archive_name: String,

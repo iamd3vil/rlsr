@@ -13,7 +13,9 @@ mod changelog_formatter;
 mod checksum;
 mod checksummer;
 pub mod config;
+mod go_build;
 mod release_provider;
+mod rust_build;
 mod templating;
 mod utils;
 
@@ -266,7 +268,7 @@ async fn run_builds_for_release(
 ) -> Result<()> {
     info!("Starting builds for release: '{}'", release.name);
 
-    let expanded_builds = expand_builds(&release.builds)?;
+    let expanded_builds = expand_builds(release)?;
 
     if release.builds_sequential {
         run_builds_sequentially(
@@ -481,10 +483,10 @@ struct ExpandedBuild {
     matrix: BTreeMap<String, String>,
 }
 
-fn expand_builds(builds: &[Build]) -> Result<Vec<ExpandedBuild>> {
+fn expand_builds(release: &Release) -> Result<Vec<ExpandedBuild>> {
     let mut expanded = Vec::new();
 
-    for build in builds {
+    for build in &release.builds {
         if let Some(matrix_groups) = &build.matrix {
             if matrix_groups.is_empty() {
                 bail!(
@@ -499,21 +501,58 @@ fn expand_builds(builds: &[Build]) -> Result<Vec<ExpandedBuild>> {
                     let mut build_clone = build.clone();
                     build_clone.matrix = None;
                     apply_matrix_to_build(&mut build_clone, &matrix_values);
-                    expanded.push(ExpandedBuild {
-                        build: build_clone,
-                        matrix: matrix_values,
-                    });
+                    for build in expand_targets(release, build_clone)? {
+                        expanded.push(ExpandedBuild {
+                            build,
+                            matrix: matrix_values.clone(),
+                        });
+                    }
                 }
             }
         } else {
-            expanded.push(ExpandedBuild {
-                build: build.clone(),
-                matrix: BTreeMap::new(),
-            });
+            for build in expand_targets(release, build.clone())? {
+                expanded.push(ExpandedBuild {
+                    build,
+                    matrix: BTreeMap::new(),
+                });
+            }
         }
     }
 
     Ok(expanded)
+}
+
+/// Expands rust and go builds into one build per target. Other build types
+/// pass through unchanged.
+fn expand_targets(release: &Release, build: Build) -> Result<Vec<Build>> {
+    let mut builds = match build.build_type {
+        BuildType::Custom | BuildType::Buildx => return Ok(vec![build]),
+        _ if build.command.is_some() => bail!(
+            "build '{}' sets `command`, but rust and go builds generate their own",
+            build.name
+        ),
+        BuildType::Rust => rust_build::expand(&build, release)?,
+        BuildType::Go => go_build::expand(&build, release)?,
+    };
+
+    if builds.len() > 1 && !build.archive_name.contains("{{") {
+        bail!(
+            "build '{}' has multiple targets, so archive_name needs a template like \
+             {{{{ meta.os }}}}-{{{{ meta.arch }}}} to keep the archives apart",
+            build.name
+        );
+    }
+
+    // Tell targets apart in logs unless the name is already templated.
+    for build in &mut builds {
+        if !build.name.contains("{{") {
+            if let Some(target) = &build.target {
+                build.name = format!("{} ({})", build.name, target);
+            }
+        }
+    }
+
+    Ok(builds)
 }
 
 fn expand_matrix_group(
@@ -931,6 +970,8 @@ mod tests {
             build_type,
             command: None,
             buildx: None,
+            rust: None,
+            go: None,
             artifact: "./bin/app".to_string(),
             bin_name: None,
             archive_name: "app".to_string(),
@@ -1039,6 +1080,80 @@ mod tests {
                     .cloned()),
             Some("desc".to_string())
         );
+    }
+
+    fn release_with(builds: Vec<Build>) -> Release {
+        Release {
+            name: "Test".to_string(),
+            dist_folder: "dist".to_string(),
+            builds,
+            targets: config::ReleaseTargets {
+                github: None,
+                gitlab: None,
+                docker: None,
+            },
+            checksum: None,
+            env: None,
+            builds_sequential: false,
+            additional_files: None,
+            hooks: None,
+        }
+    }
+
+    fn rust_build(targets: &[&str]) -> Build {
+        let mut build = base_build(BuildType::Rust);
+        build.artifact = String::new();
+        build.name = "Rust".to_string();
+        build.archive_name = "app-{{ meta.os }}-{{ meta.arch }}".to_string();
+        build.rust = Some(config::RustConfig {
+            targets: targets.iter().map(|t| t.to_string()).collect(),
+            binary: Some("app".to_string()),
+            ..Default::default()
+        });
+        build
+    }
+
+    #[test]
+    fn test_expand_builds_per_rust_target_with_matrix() {
+        let mut build = rust_build(&["x86_64-unknown-linux-musl", "aarch64-apple-darwin"]);
+        build.matrix = Some(vec![BTreeMap::from([(
+            "features".to_string(),
+            vec!["a".to_string(), "b".to_string()],
+        )])]);
+
+        let expanded = expand_builds(&release_with(vec![build])).unwrap();
+
+        assert_eq!(expanded.len(), 4);
+        assert_eq!(expanded[0].build.name, "Rust (x86_64-unknown-linux-musl)");
+        assert_eq!(expanded[0].matrix.get("features").unwrap(), "a");
+        assert_eq!(expanded[1].build.name, "Rust (aarch64-apple-darwin)");
+        assert_eq!(expanded[3].matrix.get("features").unwrap(), "b");
+    }
+
+    #[test]
+    fn test_expand_builds_keeps_templated_name() {
+        let mut build = rust_build(&["x86_64-unknown-linux-musl"]);
+        build.name = "Rust {{ meta.os }}".to_string();
+        let expanded = expand_builds(&release_with(vec![build])).unwrap();
+        assert_eq!(expanded[0].build.name, "Rust {{ meta.os }}");
+    }
+
+    #[test]
+    fn test_expand_builds_rejects_shared_archive_name() {
+        let mut build = rust_build(&["x86_64-unknown-linux-musl", "aarch64-apple-darwin"]);
+        build.archive_name = "app".to_string();
+        assert!(expand_builds(&release_with(vec![build])).is_err());
+
+        let mut build = rust_build(&["x86_64-unknown-linux-musl"]);
+        build.archive_name = "app".to_string();
+        assert!(expand_builds(&release_with(vec![build])).is_ok());
+    }
+
+    #[test]
+    fn test_expand_builds_rejects_command_on_native_build() {
+        let mut build = rust_build(&["x86_64-unknown-linux-musl"]);
+        build.command = Some("cargo build".to_string());
+        assert!(expand_builds(&release_with(vec![build])).is_err());
     }
 
     #[test]

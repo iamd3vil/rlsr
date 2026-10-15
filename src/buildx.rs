@@ -300,6 +300,8 @@ mod tests {
             build_type: BuildType::Buildx,
             command: None,
             buildx: None,
+            rust: None,
+            go: None,
             artifact: "./bin/rlsr".to_string(),
             bin_name: None,
             archive_name: "rlsr.tar.gz".to_string(),

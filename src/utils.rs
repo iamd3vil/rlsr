@@ -376,10 +376,8 @@ pub fn get_project_name() -> String {
         }
     }
 
-    if let Ok(contents) = fs::read_to_string("go.mod") {
-        if let Some(name) = parse_go_module_name(&contents) {
-            return name;
-        }
+    if let Some(name) = get_go_module_name() {
+        return name;
     }
 
     env::current_dir()
@@ -429,6 +427,12 @@ fn parse_package_json_name(contents: &str) -> Option<String> {
     let re = Regex::new(r#""name"\s*:\s*"([^"]+)""#).ok()?;
     let caps = re.captures(contents)?;
     Some(caps.get(1)?.as_str().to_string())
+}
+
+/// Returns the last element of the module path in go.mod.
+pub fn get_go_module_name() -> Option<String> {
+    let contents = fs::read_to_string("go.mod").ok()?;
+    parse_go_module_name(&contents)
 }
 
 fn parse_go_module_name(contents: &str) -> Option<String> {

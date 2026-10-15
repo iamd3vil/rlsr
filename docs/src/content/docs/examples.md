@@ -44,6 +44,59 @@ changelog:
     - "^doc:"
 ```
 
+## Rust (native builder)
+
+```yaml
+releases:
+  - name: "Release to github"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "OWNER"
+        repo: "myapp"
+    checksum:
+      algorithm: "sha256"
+    builds:
+      - name: "myapp"
+        type: "rust"
+        archive_name: "myapp-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+        archive_format: tar_gz
+        env:
+          - "CARGO_TARGET_DIR=target/{{ meta.target }}"
+        rust:
+          targets:
+            - "x86_64-unknown-linux-musl"
+            - "aarch64-unknown-linux-musl"
+            - "aarch64-apple-darwin"
+            - "x86_64-pc-windows-gnu"
+```
+
+## Go (native builder)
+
+```yaml
+releases:
+  - name: "Release to github"
+    dist_folder: "./dist"
+    targets:
+      github:
+        owner: "OWNER"
+        repo: "myapp"
+    checksum:
+      algorithm: "sha256"
+    env:
+      - "CGO_ENABLED=0"
+    builds:
+      - name: "myapp"
+        type: "go"
+        archive_name: "myapp-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+        archive_format: tar_gz
+        go:
+          main: "./cmd/myapp"
+          targets: ["linux/amd64", "linux/arm64", "darwin/arm64", "windows/amd64"]
+          flags: ["-trimpath"]
+          ldflags: ["-s -w", "-X main.version={{ meta.version }}"]
+```
+
 ## Go (matrix + buildx)
 
 ```yaml

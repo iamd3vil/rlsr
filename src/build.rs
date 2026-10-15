@@ -13,7 +13,7 @@ use tokio::fs;
 use crate::{
     buildx::{build_buildx_command, ensure_buildx_builder},
     config::{Build, BuildType, Release},
-    templating,
+    rust_build, templating,
     utils::{self, archive_files, ArchiveFile},
 };
 
@@ -208,7 +208,11 @@ async fn execute_build_command(
     debug!("envs: {:?}", envs);
 
     match build.build_type {
-        BuildType::Custom => {
+        // Rust and Go builds get their command when they're expanded per target.
+        BuildType::Custom | BuildType::Rust | BuildType::Go => {
+            if build.build_type == BuildType::Rust {
+                rust_build::ensure_target(build, &envs).await?;
+            }
             let command = build.command.as_ref().ok_or_else(|| {
                 eyre!(
                     "missing build command for build '{}'",
@@ -444,6 +448,8 @@ mod tests {
             build_type: BuildType::Custom,
             command: Some("echo build".to_string()),
             buildx: None,
+            rust: None,
+            go: None,
             artifact: "./bin/rlsr".to_string(),
             bin_name: None,
             archive_name: "rlsr.tar.gz".to_string(),

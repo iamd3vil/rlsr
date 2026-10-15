@@ -12,6 +12,7 @@ Templating is supported in:
 - Release env values: `env`
 - Build fields: `name`, `command`, `bin_name`, `artifact`, `archive_name`, `prehook`, `posthook`
 - Build env values: `env`
+- Rust and Go build fields: `rust.tool`, `rust.flags`, `rust.binary`, `go.main`, `go.flags`, `go.ldflags`, `go.binary`
 - Additional files: release and build `additional_files`
 - Docker target images: `targets.docker.image`, `targets.docker.images`
 - Changelog templates: `changelog.template`
@@ -27,7 +28,7 @@ Available fields:
 - `meta.tag`, `meta.version`, `meta.major`, `meta.minor`, `meta.patch`, `meta.prerelease`
 - `meta.short_commit`
 - `meta.is_snapshot`, `meta.is_prerelease`, `meta.is_dirty`
-- `meta.os`, `meta.arch`, `meta.arm`, `meta.target`
+- `meta.os`, `meta.arch`, `meta.arm`, `meta.target` (filled in per target for `rust` and `go` builds)
 - `meta.matrix` (map of matrix values, e.g. `meta.matrix.os`)
 - `env.VAR_NAME`
 - `date` (YYYY-MM-DD), `timestamp` (unix seconds), `now` (RFC 3339)

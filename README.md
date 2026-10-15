@@ -13,6 +13,7 @@ Documentation: [https://rlsr.sarat.dev/](https://rlsr.sarat.dev/)
 ## Features
 
 - Build multiple release artifacts with configurable commands and hooks.
+- Native Rust and Go builders: list the targets and Rlsr cross-compiles each one.
 - Publish to GitHub Releases and Docker registries.
 - Generate checksums with configurable algorithms.
 - Templated configuration with release/build metadata.
@@ -57,6 +58,23 @@ releases:
         command: "just build-linux"
         artifact: "target/x86_64-unknown-linux-musl/release/rlsr"
         archive_name: "rlsr-{{ meta.tag }}-linux-x86_64"
+```
+
+### Native Rust and Go builds
+
+```yaml
+builds:
+  - name: "myapp"
+    type: "rust" # uses cargo zigbuild by default
+    archive_name: "myapp-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+    rust:
+      targets: ["x86_64-unknown-linux-musl", "aarch64-apple-darwin", "x86_64-pc-windows-gnu"]
+  - name: "mytool"
+    type: "go"
+    archive_name: "mytool-{{ meta.tag }}-{{ meta.os }}-{{ meta.arch }}"
+    go:
+      targets: ["linux/amd64", "darwin/arm64", "windows/amd64"]
+      ldflags: ["-s -w", "-X main.version={{ meta.version }}"]
 ```
 
 ### Build matrix example
