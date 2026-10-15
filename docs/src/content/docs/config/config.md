@@ -286,6 +286,7 @@ A nightly is always a prerelease, so it never becomes the latest release, and it
 Each target handles the rolling release:
 
 - GitHub: deletes the previous release and tag, then creates the release at HEAD.
+- GitLab: deletes the previous release, tag and generic package files, then creates the release at HEAD.
 - Docker: pushes images tagged with `meta.tag`, so an image without a tag is pushed as `:nightly`. `meta.version` contains `+`, which Docker tags don't allow, so don't use it in image tags.
 
 ## Build Matrix

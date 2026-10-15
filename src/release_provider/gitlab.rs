@@ -7,7 +7,7 @@ use camino::Utf8Path;
 use color_eyre::eyre::{bail, Context, Result};
 use log::{debug, error, info};
 use reqwest::{Body, Client};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::fs;
 use tokio_util::codec::{BytesCodec, FramedRead};
@@ -85,6 +85,12 @@ impl Gitlab {
             .build()?;
         let client = Arc::new(client);
 
+        // A nightly replaces the previous one under the same tag.
+        if meta.is_nightly {
+            Self::delete_previous_nightly(&client, base_url, &encoded_project, &token, latest_tag)
+                .await?;
+        }
+
         // First, upload all archives as generic package files and collect their URLs
         let mut asset_links = Vec::new();
 
@@ -149,6 +155,8 @@ impl Gitlab {
 
         let release_request = CreateReleaseRequest {
             tag_name: latest_tag.clone(),
+            // Creates the tag at HEAD when it doesn't exist, as for a nightly.
+            git_ref: meta.commit.clone(),
             description: changelog,
             assets: ReleaseAssets { links: asset_links },
         };
@@ -181,6 +189,82 @@ impl Gitlab {
         Ok(())
     }
 
+    /// Deletes the previous nightly's release, tag and package files, if they
+    /// exist.
+    async fn delete_previous_nightly(
+        client: &Client,
+        base_url: &str,
+        encoded_project: &str,
+        token: &str,
+        tag: &str,
+    ) -> Result<()> {
+        let api = format!("{}/api/v4/projects/{}", base_url, encoded_project);
+        let encoded_tag = urlencoding::encode(tag);
+        // Deleting a release leaves its tag behind, so delete both.
+        for (what, url) in [
+            ("release", format!("{}/releases/{}", api, encoded_tag)),
+            ("tag", format!("{}/repository/tags/{}", api, encoded_tag)),
+        ] {
+            let res = client
+                .delete(&url)
+                .header("PRIVATE-TOKEN", token)
+                .send()
+                .await
+                .with_context(|| format!("error deleting the previous {} {}", tag, what))?;
+            if res.status() == reqwest::StatusCode::NOT_FOUND {
+                continue;
+            }
+            if !res.status().is_success() {
+                let status = res.status();
+                let body = res.text().await.unwrap_or_default();
+                bail!(
+                    "error deleting the previous {} {}, status: {}, error: {}",
+                    tag,
+                    what,
+                    status,
+                    body
+                );
+            }
+            info!("deleted the previous {} {}", tag, what);
+        }
+
+        // Uploading to the same package version adds files next to the old
+        // ones, so delete the package. package_name matches loosely, so
+        // check the name and version too.
+        let version = package_version(tag);
+        let packages: Vec<Package> = client
+            .get(format!("{}/packages", api))
+            .query(&[
+                ("package_type", "generic"),
+                ("package_name", PACKAGE_NAME),
+                ("package_version", version),
+            ])
+            .header("PRIVATE-TOKEN", token)
+            .send()
+            .await
+            .context("error listing gitlab packages")?
+            .error_for_status()
+            .context("error listing gitlab packages")?
+            .json()
+            .await
+            .context("error reading gitlab packages")?;
+        for package in packages
+            .iter()
+            .filter(|p| p.name == PACKAGE_NAME && p.version == version)
+        {
+            client
+                .delete(format!("{}/packages/{}", api, package.id))
+                .header("PRIVATE-TOKEN", token)
+                .send()
+                .await
+                .context("error deleting gitlab package")?
+                .error_for_status()
+                .with_context(|| format!("error deleting gitlab package {}", package.id))?;
+            info!("deleted the previous {} package files", tag);
+        }
+        Ok(())
+    }
+
     /// Upload a file to GitLab's generic package registry and return the download URL
     async fn upload_package_file(
         client: Arc<Client>,
@@ -192,12 +276,12 @@ impl Gitlab {
         filename: &str,
     ) -> Result<String> {
         // Sanitize version for package registry (remove 'v' prefix if present)
-        let package_version = version.strip_prefix('v').unwrap_or(version);
+        let package_version = package_version(version);
 
         // Upload URL for generic packages
         let upload_url = format!(
-            "{}/api/v4/projects/{}/packages/generic/release/{}/{}",
-            base_url, encoded_project, package_version, filename
+            "{}/api/v4/projects/{}/packages/generic/{}/{}/{}",
+            base_url, encoded_project, PACKAGE_NAME, package_version, filename
         );
 
         debug!("uploading file {} to {}", filepath, upload_url);
@@ -234,8 +318,8 @@ impl Gitlab {
 
         // Construct the download URL (GitLab returns just {"message": "201 Created"})
         let download_url = format!(
-            "{}/api/v4/projects/{}/packages/generic/release/{}/{}",
-            base_url, encoded_project, package_version, filename
+            "{}/api/v4/projects/{}/packages/generic/{}/{}/{}",
+            base_url, encoded_project, PACKAGE_NAME, package_version, filename
         );
 
         debug!("file uploaded successfully: {}", download_url);
@@ -243,9 +327,26 @@ impl Gitlab {
     }
 }
 
+/// Generic package that release files are uploaded to.
+const PACKAGE_NAME: &str = "release";
+
+/// The package version files for a tag are uploaded under.
+fn package_version(tag: &str) -> &str {
+    tag.strip_prefix('v').unwrap_or(tag)
+}
+
+#[derive(Debug, Deserialize)]
+struct Package {
+    id: u64,
+    name: String,
+    version: String,
+}
+
 #[derive(Debug, Serialize)]
 struct CreateReleaseRequest {
     tag_name: String,
+    #[serde(rename = "ref")]
+    git_ref: String,
     description: String,
     assets: ReleaseAssets,
 }
@@ -260,4 +361,29 @@ struct AssetLink {
     name: String,
     url: String,
     link_type: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_package_version() {
+        assert_eq!(package_version("v1.2.3"), "1.2.3");
+        assert_eq!(package_version("1.2.3"), "1.2.3");
+        assert_eq!(package_version("nightly"), "nightly");
+    }
+
+    #[test]
+    fn test_create_release_request_sends_ref() {
+        let request = CreateReleaseRequest {
+            tag_name: "nightly".to_string(),
+            git_ref: "abcdef1234567890".to_string(),
+            description: "notes".to_string(),
+            assets: ReleaseAssets { links: vec![] },
+        };
+        let json = serde_yaml::to_string(&request).unwrap();
+        assert!(json.contains("ref: abcdef1234567890"));
+        assert!(!json.contains("git_ref"));
+    }
 }
