@@ -441,7 +441,19 @@ fn parse_go_module_name(contents: &str) -> Option<String> {
         if let Some(rest) = trimmed.strip_prefix("module ") {
             let module = rest.split_whitespace().next()?;
             let module = module.trim_matches('"');
-            return Some(module.rsplit('/').next().unwrap_or(module).to_string());
+            // Skip a major version suffix: example.com/app/v2 is "app".
+            let mut parts = module.rsplit('/');
+            let last = parts.next()?;
+            let is_major = last
+                .strip_prefix('v')
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+            return Some(
+                match parts.next() {
+                    Some(name) if is_major => name,
+                    _ => last,
+                }
+                .to_string(),
+            );
         }
     }
 
@@ -636,6 +648,14 @@ module example.com/acme/widget
 go 1.22
 "#;
         assert_eq!(parse_go_module_name(contents), Some("widget".to_string()));
+        assert_eq!(
+            parse_go_module_name("module example.com/acme/widget/v2\n"),
+            Some("widget".to_string())
+        );
+        assert_eq!(
+            parse_go_module_name("module example.com/acme/v2ray\n"),
+            Some("v2ray".to_string())
+        );
     }
 
     #[test]
