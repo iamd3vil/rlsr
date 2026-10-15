@@ -368,7 +368,11 @@ releases:
 "#;
 
         let cfg: Config = serde_yaml::from_str(yaml).expect("config should deserialize");
-        let gitlab = cfg.releases[0].targets.gitlab.as_ref().expect("gitlab target should exist");
+        let gitlab = cfg.releases[0]
+            .targets
+            .gitlab
+            .as_ref()
+            .expect("gitlab target should exist");
 
         assert_eq!(gitlab.owner, "myteam");
         assert_eq!(gitlab.repo, "myproject");

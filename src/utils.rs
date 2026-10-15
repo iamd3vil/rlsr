@@ -472,7 +472,10 @@ pub async fn archive_files(
     let path: Result<String> = task::spawn_blocking(move || {
         let base_path = Utf8Path::new(&dist).join(&name);
         let archive_path = format!("{}{}", base_path, format.extension());
-        debug!("creating archive: {:?} with format {:?}", archive_path, format);
+        debug!(
+            "creating archive: {:?} with format {:?}",
+            archive_path, format
+        );
 
         match format {
             ArchiveFormat::Zip => create_zip_archive(&filenames, &archive_path),
@@ -729,7 +732,9 @@ version = "0.1.0"
             dir.to_string_lossy().to_string(),
             "test-archive".to_string(),
             ArchiveFormat::Zip,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(archive_path.ends_with(".zip"));
         assert!(std::path::Path::new(&archive_path).exists());
@@ -752,7 +757,9 @@ version = "0.1.0"
             dir.to_string_lossy().to_string(),
             "test-archive".to_string(),
             ArchiveFormat::TarGz,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(archive_path.ends_with(".tar.gz"));
         assert!(std::path::Path::new(&archive_path).exists());
@@ -775,7 +782,9 @@ version = "0.1.0"
             dir.to_string_lossy().to_string(),
             "test-archive".to_string(),
             ArchiveFormat::TarZstd,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(archive_path.ends_with(".tar.zstd"));
         assert!(std::path::Path::new(&archive_path).exists());
@@ -798,7 +807,9 @@ version = "0.1.0"
             dir.to_string_lossy().to_string(),
             "test-archive".to_string(),
             ArchiveFormat::TarLz4,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(archive_path.ends_with(".tar.lz4"));
         assert!(std::path::Path::new(&archive_path).exists());

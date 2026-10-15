@@ -139,17 +139,13 @@ impl Gitlab {
         }
 
         // Create the release with asset links
-        let create_release_url = format!(
-            "{}/api/v4/projects/{}/releases",
-            base_url, encoded_project
-        );
+        let create_release_url =
+            format!("{}/api/v4/projects/{}/releases", base_url, encoded_project);
 
         let release_request = CreateReleaseRequest {
             tag_name: latest_tag.clone(),
             description: changelog,
-            assets: ReleaseAssets {
-                links: asset_links,
-            },
+            assets: ReleaseAssets { links: asset_links },
         };
 
         debug!("creating gitlab release for tag: {}", latest_tag);
@@ -165,7 +161,10 @@ impl Gitlab {
         if !res.status().is_success() {
             let status = res.status();
             let error_body = res.text().await.unwrap_or_default();
-            error!("gitlab release creation failed: {} - {}", status, error_body);
+            error!(
+                "gitlab release creation failed: {} - {}",
+                status, error_body
+            );
             bail!(
                 "error creating gitlab release, status: {}, error: {}",
                 status,
@@ -257,5 +256,3 @@ struct AssetLink {
     url: String,
     link_type: String,
 }
-
-
