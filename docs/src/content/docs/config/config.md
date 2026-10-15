@@ -179,12 +179,12 @@ builds:
         - "x86_64-pc-windows-gnu"
 ```
 
-For each target, Rlsr installs the target with `rustup target add` if `rustup target list --installed` doesn't list it, runs `<tool> --target <target> <flags>` and picks up `<target dir>/<target>/<profile>/<binary>` (with `.exe` on Windows).
+For each target, Rlsr installs the target with `rustup target add` if `rustup target list --installed` doesn't list it (only when `tool` is a `cargo` command), runs `<tool> --target <target> <flags>` and picks up `<target dir>/<target>/<profile>/<binary>` (with `.exe` on Windows).
 
 Supported `rust` keys:
 
 - `targets`: Target triples to build.
-- `tool`: (Optional) The build command, which must accept `--target`. Defaults to `cargo zigbuild`, which cross-compiles with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild). Use `cargo build` for the host target or `cross build` for [cross](https://github.com/cross-rs/cross). Rlsr skips the rustup step for `cross`. Rlsr doesn't install these tools; install them in a before hook or in CI. cargo-zigbuild can't link macOS binaries that use system frameworks (most programs that make network calls do) without the macOS SDK, so build macOS targets with `tool: cargo build` on a Mac or a macOS CI runner.
+- `tool`: (Optional) The build command, which must accept `--target`. Defaults to `cargo zigbuild`, which cross-compiles with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild). Use `cargo build` for the host target, `cross build` for [cross](https://github.com/cross-rs/cross), or a wrapper script. Rlsr only runs the rustup step for `cargo` commands; other tools have to provide the target themselves. Rlsr doesn't install these tools; install them in a before hook or in CI. cargo-zigbuild can't link macOS binaries that use system frameworks (most programs that make network calls do) without the macOS SDK, so build macOS targets with `tool: cargo build` on a Mac or a macOS CI runner.
 - `flags`: (Optional) Extra cargo flags. Defaults to `--release`. Setting `flags` replaces the default, so include `--release` or `--profile <name>` yourself. Rlsr reads the profile from these flags to find the binary.
 - `binary`: (Optional) The binary name. Defaults to the package name in `Cargo.toml`. Set it for workspaces, together with `-p <package>` in `flags`.
 

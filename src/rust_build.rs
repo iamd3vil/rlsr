@@ -58,8 +58,9 @@ pub fn expand(build: &Build, release: &Release) -> Result<Vec<Build>> {
     Ok(builds)
 }
 
-/// Installs the build's target with rustup if it isn't installed yet. Skipped
-/// for cross, which brings its own toolchains.
+/// Installs the build's target with rustup if it isn't installed yet. Only
+/// done when the tool is a cargo command; others, like cross or a wrapper
+/// script running a container, bring their own toolchains.
 pub async fn ensure_target(build: &Build, envs: &Option<Vec<String>>) -> Result<()> {
     let tool = build
         .rust
@@ -69,7 +70,8 @@ pub async fn ensure_target(build: &Build, envs: &Option<Vec<String>>) -> Result<
     let Some(target) = build.target.as_deref() else {
         return Ok(());
     };
-    if tool.starts_with("cross") {
+    if !runs_host_cargo(tool) {
+        debug!("skipping rustup for tool '{}'", tool);
         return Ok(());
     }
 
@@ -96,6 +98,10 @@ pub async fn ensure_target(build: &Build, envs: &Option<Vec<String>>) -> Result<
         );
     }
     Ok(())
+}
+
+fn runs_host_cargo(tool: &str) -> bool {
+    tool.split_whitespace().next() == Some("cargo")
 }
 
 fn is_installed(installed: &str, target: &str) -> bool {
@@ -317,6 +323,15 @@ mod tests {
             cargo_target_dir(&release, &build),
             "target/{{ meta.target }}"
         );
+    }
+
+    #[test]
+    fn test_runs_host_cargo() {
+        assert!(runs_host_cargo("cargo zigbuild"));
+        assert!(runs_host_cargo("cargo build"));
+        assert!(!runs_host_cargo("cross build"));
+        assert!(!runs_host_cargo("just cargo-macos"));
+        assert!(!runs_host_cargo("cargo-zigbuild zigbuild"));
     }
 
     #[test]
