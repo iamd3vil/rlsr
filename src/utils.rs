@@ -146,17 +146,15 @@ pub async fn get_github_repo_from_remote() -> Result<Option<(String, String)>> {
 
 fn parse_github_repo_url(remote: &str) -> Option<(String, String)> {
     let remote = remote.trim();
-    let rest = if let Some(rest) = remote.strip_prefix("git@github.com:") {
-        rest
-    } else if let Some(rest) = remote.strip_prefix("https://github.com/") {
-        rest
-    } else if let Some(rest) = remote.strip_prefix("http://github.com/") {
-        rest
-    } else if let Some(rest) = remote.strip_prefix("ssh://git@github.com/") {
-        rest
-    } else {
-        return None;
-    };
+    let prefixes = [
+        "git@github.com:",
+        "https://github.com/",
+        "http://github.com/",
+        "ssh://git@github.com/",
+    ];
+    let rest = prefixes
+        .iter()
+        .find_map(|prefix| remote.strip_prefix(prefix))?;
 
     let rest = rest.strip_suffix(".git").unwrap_or(rest);
     let mut parts = rest.splitn(3, '/');
