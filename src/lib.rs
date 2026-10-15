@@ -779,8 +779,7 @@ async fn publish_release_artifacts(
     );
 
     for provider in providers {
-        // Use type_name_of_val for a more descriptive placeholder
-        let provider_description = std::any::type_name_of_val(&*provider);
+        let provider_description = provider.name();
         info!("Publishing via {}", provider_description);
         let archives_clone = all_archives.clone();
         let image_tags_clone = image_tags.clone();

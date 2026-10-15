@@ -102,6 +102,10 @@ fn image_has_tag_or_digest(image: &str) -> bool {
 
 #[async_trait]
 impl ReleaseProvider for Docker {
+    fn name(&self) -> &'static str {
+        "Docker"
+    }
+
     async fn publish(
         &self,
         release: &Release,

@@ -13,6 +13,10 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 
 #[async_trait]
 impl ReleaseProvider for Gitlab {
+    fn name(&self) -> &'static str {
+        "GitLab"
+    }
+
     async fn publish(
         &self,
         release: &Release,

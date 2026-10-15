@@ -17,6 +17,10 @@ const UPLOAD_ATTEMPTS: u64 = 3;
 
 #[async_trait]
 impl ReleaseProvider for Github {
+    fn name(&self) -> &'static str {
+        "GitHub"
+    }
+
     async fn publish(
         &self,
         release: &Release,

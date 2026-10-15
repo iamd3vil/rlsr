@@ -11,6 +11,9 @@ pub mod gitlab;
 /// for github or docker and just call it from our main execution loop.
 #[async_trait]
 pub trait ReleaseProvider {
+    /// Name used in logs, such as "GitHub".
+    fn name(&self) -> &'static str;
+
     async fn publish(
         &self,
         cfg: &Release,
