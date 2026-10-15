@@ -974,11 +974,20 @@ pub async fn run(cfg: Config, opts: Opts) -> Result<()> {
                 })?;
         }
 
-        let changelog = utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await?;
-        debug!(
-            "Changelog for release '{}': \n{}",
-            release_config.name, changelog
-        );
+        // Providers build their own changelog; this one is only logged as a
+        // preview, so a run that doesn't publish shouldn't fail on it (for
+        // example, github_notes without a GITHUB_TOKEN).
+        match utils::get_changelog(&cfg.changelog.clone().unwrap_or_default()).await {
+            Ok(changelog) => debug!(
+                "Changelog for release '{}': \n{}",
+                release_config.name, changelog
+            ),
+            Err(err) if !publish => warn!(
+                "Couldn't generate the changelog for release '{}': {:#}",
+                release_config.name, err
+            ),
+            Err(err) => return Err(err),
+        }
 
         // Publish artifacts if enabled for this run
         if publish {
