@@ -7,7 +7,7 @@ build:
     cargo build
 
 release:
-    cargo run --release -- -c rlsr.yml --rm-dist -p
+    cargo run --release -- -c rlsr.yml --rm-dist
 
 build-linux $RUSTFLAGS="-C target-feature=+crt-static":
     #!/usr/bin/env sh
