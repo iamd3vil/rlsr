@@ -8,7 +8,7 @@
 - `dist/` and `target/` are generated outputs for release artifacts and Cargo builds.
 
 ## Build, Test, and Development Commands
-- Prefer `just` targets from `Justfile` whenever available (e.g., `just build`, `just release`, `just build-linux`, `just docs-serve`) before invoking `cargo` directly.
+- Prefer `just` targets from `Justfile` whenever available (e.g., `just build`, `just release`, `just cargo-macos`, `just docs-serve`) before invoking `cargo` directly.
 - `cargo build`: build the Rust binary (use if no `just` target fits).
 - `cargo run -- --config rlsr.yml`: run locally with a specific config.
 - `cargo test`: run unit tests (primarily under checksum modules).
